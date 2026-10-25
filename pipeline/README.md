@@ -95,5 +95,12 @@ it with automatic weights, fades arm influence out of the torso silhouette (arms
 against the body would otherwise drag the chest), keyframes every protocol clip
 procedurally, and exports the rigged GLB. `--poses` renders one frame per clip for a
 quick look. About 10 s. The motion is simple and cheerful rather than mocap; swap in
-Mixamo clips through `assemble.py` whenever you want better. Because the bone names are
+Mixamo clips through `assemble.py` whenever you want better.
+
+Generate the source character in an **A-pose** (arms held away from the body). The rig
+measures how far the arms lean out and lowers them to the sides as the base pose of every
+clip, so the character stands with arms down and raises them only to express. Arms drawn
+against the body are detected and get shrugs instead of swings. Separate posed renders
+(success, thinking, failed) cannot be animated between, since every image-to-3D run gives
+a different mesh, but they are good references for tuning the key poses in `CLIPS`. Because the bone names are
 Mixamo's, the renderer's head look-at works with either.

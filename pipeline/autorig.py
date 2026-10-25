@@ -63,6 +63,17 @@ def landmarks(mesh_obj: bpy.types.Object) -> dict:
     def band_at(z: float) -> int:
         return int(np.clip(z / H * n, 0, n - 1))
 
+    def torso_half(z: float) -> float:
+        """Half-width of the central body at height z: |x| up to the first gap wider than
+        2% of the height. With arms away from the body that gap separates torso from arm;
+        with arms against the body there is no gap and the full width is returned."""
+        sel = np.sort(np.abs(v[band == band_at(z)][:, 0]))
+        if len(sel) < 4:
+            return 0.1 * H
+        gaps = np.diff(sel)
+        idx = np.argmax(gaps > 0.02 * H) if (gaps > 0.02 * H).any() else len(sel) - 1
+        return float(sel[idx])
+
     top = H
     upper = zc > 0.5 * H
     head_z = float(zc[upper][np.argmax(width[upper])])
@@ -70,7 +81,8 @@ def landmarks(mesh_obj: bpy.types.Object) -> dict:
     lo, hi = band_at(0.4 * H), band_at(head_z - 0.08 * H)
     neck_z = float(zc[lo + np.argmin(width[lo:hi])]) if hi > lo else 0.6 * H
     shoulder_z = neck_z - 0.05 * H
-    sh_half = width[band_at(shoulder_z)] / 2
+    sh_half = width[band_at(shoulder_z)] / 2          # full silhouette, arms included
+    torso_sh = torso_half(shoulder_z)                 # body only
 
     legs = (zc > 0.05 * H) & (zc < 0.45 * H) & centre_gap
     crotch_z = float(zc[legs].max()) if legs.any() else 0.3 * H
@@ -86,7 +98,7 @@ def landmarks(mesh_obj: bpy.types.Object) -> dict:
     elbow_z = (shoulder_z + wrist_z) / 2
     # Arms drawn against the body: the silhouette at elbow height is no wider than the hips.
     arm_separation = float(maxabs[band_at(elbow_z)] / max(maxabs[band_at(hips_z)], 1e-6))
-    arms_fused = arm_separation < 1.25
+    arms_fused = bool(arm_separation < 1.25 and torso_half(elbow_z) >= 0.9 * maxabs[band_at(elbow_z)])
     arm = lambda z: max(maxabs[band_at(z)] * 0.82, sh_half * 0.6)  # stay inside the mesh
 
     def P(x: float, z: float, zy: float | None = None) -> Vector:
@@ -98,11 +110,11 @@ def landmarks(mesh_obj: bpy.types.Object) -> dict:
         "spine1": P(0, hips_z + (neck_z - hips_z) * 0.6), "spine2": P(0, hips_z + (neck_z - hips_z) * 0.85),
         "neck": P(0, neck_z), "head": P(0, neck_z + 0.03 * H), "head_top": P(0, top, head_z),
         "shoulder_z": shoulder_z, "sh_half": sh_half, "head_half": head_half,
-        "arm_separation": round(arm_separation, 3), "arms_fused": arms_fused,
+        "arm_separation": round(arm_separation, 3), "arms_fused": arms_fused, "torso_sh": float(torso_sh),
     }
     for side, s in (("Left", 1), ("Right", -1)):
-        L[f"{side}Shoulder"] = P(s * sh_half * 0.35, shoulder_z + 0.01 * H)
-        L[f"{side}Arm"] = P(s * sh_half * 0.85, shoulder_z)
+        L[f"{side}Shoulder"] = P(s * torso_sh * 0.4, shoulder_z + 0.01 * H)
+        L[f"{side}Arm"] = P(s * torso_sh * 0.95, shoulder_z)
         L[f"{side}ForeArm"] = P(s * arm(elbow_z), elbow_z)
         L[f"{side}Hand"] = P(s * arm(wrist_z), wrist_z)
         L[f"{side}HandEnd"] = P(s * arm(wrist_z), wrist_z - 0.06 * H)
@@ -111,6 +123,8 @@ def landmarks(mesh_obj: bpy.types.Object) -> dict:
         L[f"{side}Foot"] = P(s * leg_x, ankle_z)
         L[f"{side}ToeBase"] = Vector((s * leg_x, foot_y - 0.07 * H, 0.015 * H + z0))
         L[f"{side}ToeEnd"] = Vector((s * leg_x, foot_y - 0.11 * H, 0.01 * H + z0))
+    d = L["LeftHand"] - L["LeftArm"]
+    L["arm_rest_deg"] = 0.0 if arms_fused else max(0.0, math.degrees(math.atan2(abs(d.x), max(1e-6, -d.z))) - 8.0)
     return L
 
 
@@ -180,8 +194,8 @@ def protect_torso(mesh_obj: bpy.types.Object, L: dict) -> dict:
     weighting, so a raised arm drags the chest along. Fade arm-bone influence to zero
     inside the torso silhouette and hand that weight to the spine instead."""
     H = L["H"]
-    sh = L["sh_half"]
-    inner, outer = 0.62 * sh, 0.92 * sh
+    sh = L["torso_sh"]
+    inner, outer = 0.9 * sh, 1.25 * sh
     z_lo, z_hi = L["hips"].z, L["shoulder_z"] + L["hips"].z - L["hips"].z + 0.06 * H
     groups = {g.name: g for g in mesh_obj.vertex_groups}
     arm_names = [f"mixamorig:{s}{p}" for s in ("Left", "Right") for p in ("Shoulder", "Arm", "ForeArm", "Hand")]
@@ -255,9 +269,10 @@ def deg(x: float, y: float = 0.0, z: float = 0.0) -> tuple[float, float, float]:
 class Poser:
     """Sample a pose function over a clip and write keyframes into a new action."""
 
-    def __init__(self, arm: bpy.types.Object, arm_motion: float = 1.0):
+    def __init__(self, arm: bpy.types.Object, arm_motion: float = 1.0, arm_rest_deg: float = 0.0):
         self.arm = arm
         self.arm_motion = arm_motion  # 1 = full swings; ~0.35 when the arms are fused to the body
+        self.arm_rest_deg = arm_rest_deg  # lower the arms from the modelled pose to the sides
         for pb in arm.pose.bones:
             pb.rotation_mode = "XYZ"
         self.pitch_sign, self.out_sign, self.fwd_sign = self.calibrate()
@@ -288,6 +303,9 @@ class Poser:
         for pb in self.arm.pose.bones:
             pb.rotation_euler = (0, 0, 0)
             pb.location = (0, 0, 0)
+        if self.arm_rest_deg:
+            for side, sgn in (("Left", 1), ("Right", -1)):
+                self.rot(f"{side}Arm", z=-sgn * self.arm_rest_deg * self.out_sign)
 
     def key(self, frame: int) -> None:
         for pb in self.arm.pose.bones:
@@ -553,7 +571,7 @@ def main() -> None:
         weights = "envelope"
 
     arm_motion = args.arm_motion if args.arm_motion is not None else (0.35 if L["arms_fused"] else 1.0)
-    poser = Poser(arm, arm_motion)
+    poser = Poser(arm, arm_motion, L["arm_rest_deg"])
     for name, seconds, fn in CLIPS:
         poser.clip(name, seconds, fn)
     poser.reset()
@@ -564,7 +582,7 @@ def main() -> None:
 
     report = {
         "out": str(out), "bytes": out.stat().st_size, "weights": weights, "weight_fraction": round(weight_fraction, 3),
-        "verts": len(mesh_obj.data.vertices), **protect, "arm_motion": arm_motion, "arms_fused": L["arms_fused"], "arm_separation": L["arm_separation"],
+        "verts": len(mesh_obj.data.vertices), **protect, "arm_motion": arm_motion, "arms_fused": L["arms_fused"], "arm_separation": L["arm_separation"], "arm_rest_deg": round(L["arm_rest_deg"], 1),
         "bones": len(arm.data.bones), "clips": {n: s for n, s, _ in CLIPS},
         "landmarks": {k: [round(c, 3) for c in v] for k, v in L.items() if isinstance(v, Vector)},
         "poses": poses,
