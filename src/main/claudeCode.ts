@@ -3,6 +3,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentEvent, Mood } from '@shared/bubble';
+import { SIGN_IN_ACTIONS } from './onboarding';
 import { SYSTEM, MOOD_RE } from './agent';
 import type { LookupInput } from './agent';
 
@@ -115,20 +116,28 @@ export async function lookupViaClaudeCode(input: LookupInput, onEvent: (e: Agent
           talking = false; // text after a tool call is a new block
         }
       }
-    } else if (type === 'user' || (type === 'assistant' && !talking)) {
-      for (const s of extractSources(msg['message'])) {
-        if (seen.has(s.url)) continue;
-        seen.add(s.url);
+    } else if (type === 'user') {
+      // One search returns ~10 links; surface the top few, the answer text cites the rest.
+      let n = 0;
+      for (const s of extractSources(msg['tool_use_result'] ?? msg['message'])) {
+        if (seen.has(s.url) || n >= 3) continue;
+        seen.add(s.url); n++;
         onEvent({ type: 'source', url: s.url, title: s.title });
       }
+    } else if (type === 'rate_limit_event') {
+      console.warn('[claude-code] rate limit event', JSON.stringify(msg).slice(0, 300));
     } else if (type === 'result') {
       finished = true;
       const result = typeof msg['result'] === 'string' ? msg['result'] : text;
       if (msg['is_error']) {
-        onEvent({ type: 'error', message: friendly(result) });
+        const signIn = /OAuth|authenticate|login/i.test(result);
+        onEvent({ type: 'error', message: friendly(result), actions: signIn ? SIGN_IN_ACTIONS : undefined });
         return;
       }
       const final = result || text;
+      for (const mm of final.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g)) {
+        if (!seen.has(mm[2])) { seen.add(mm[2]); onEvent({ type: 'source', url: mm[2], title: mm[1] }); }
+      }
       const m = MOOD_RE.exec(final);
       const mood: Mood = (m?.[1]?.toLowerCase() as Mood) ?? 'neutral';
       onEvent({ type: 'done', mood, text: final.replace(MOOD_RE, '').trim() });

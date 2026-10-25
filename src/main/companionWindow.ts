@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, ipcMain, systemPreferences, app } from 'electron';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { Command, CompanionConfig, RendererEvent } from '@shared/protocol';
 import { IPC } from '@shared/protocol';
@@ -104,12 +105,19 @@ export class CompanionWindow {
     const home = s.home ?? { x: width - 140, y: height - 24 };
     this.feet = home;
     return {
-      modelUrl: pathToFileURL(join(app.getAppPath(), 'assets', 'placeholder.glb')).href,
+      modelUrl: this.modelUrl(s.modelUrl),
       canvas: { width, height, dpr: screen.getPrimaryDisplay().scaleFactor },
       home,
       scale: s.scale,
       reducedMotion: systemPreferences.getAnimationSettings().prefersReducedMotion,
     };
+  }
+
+  /** User-chosen model, else the rigged asset, else the static placeholder. */
+  modelUrl(custom: string | null): string {
+    if (custom) return custom;
+    const rigged = join(app.getAppPath(), 'assets', 'clippet.glb');
+    return pathToFileURL(existsSync(rigged) ? rigged : join(app.getAppPath(), 'assets', 'placeholder.glb')).href;
   }
 
   private handleEvent(win: BrowserWindow, event: RendererEvent): void {

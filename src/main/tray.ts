@@ -5,8 +5,12 @@ export interface TrayActions {
   lookAtSomething(): void;
   toggleVisible(): void;
   toggleSleep(): void;
+  chooseModel(): void;
+  resetModel(): void;
+  setup(): void;
   isVisible(): boolean;
   isSleeping(): boolean;
+  hasCustomModel(): boolean;
   shortcutLabel: string;
 }
 
@@ -23,6 +27,10 @@ export function createTray(actions: TrayActions): Tray {
         { type: 'separator' },
         { label: actions.isVisible() ? 'Hide Clippet' : 'Show Clippet', click: () => { actions.toggleVisible(); rebuild(); } },
         { label: actions.isSleeping() ? 'Wake up' : 'Do not disturb', click: () => { actions.toggleSleep(); rebuild(); } },
+        { type: 'separator' },
+        { label: 'Use your own model (GLB)…', click: () => { actions.chooseModel(); rebuild(); } },
+        { label: 'Use the default model', enabled: actions.hasCustomModel(), click: () => { actions.resetModel(); rebuild(); } },
+        { label: 'Sign-in check…', click: () => actions.setup() },
         { type: 'separator' },
         { label: 'Quit Clippet', role: 'quit' },
       ]),

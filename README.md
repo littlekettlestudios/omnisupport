@@ -39,7 +39,12 @@ region picker once, 2.5 s after launch.
 
 - Transparent, frameless, always-on-top window covering the work area, click-through
   everywhere except on the character. Drag the character to move it; the spot is remembered.
-- Menu-bar tray: Look at something, Show/Hide, Do not disturb, Quit. Global shortcut `⌘⌥Space`.
+- Menu-bar tray: Look at something, Show/Hide, Do not disturb, Use your own model (GLB),
+  Sign-in check, Quit. Global shortcut `⌘⌥Space`.
+- First-run onboarding: when the Claude Code backend is selected and the CLI is missing or
+  signed out, the character waves and a card explains how to sign in, with an Open Terminal
+  button (starts `claude` in Terminal for /login) and Check again. The same card appears if
+  a lookup fails for the same reason.
 - The lookup loop: shortcut → drag a rectangle on the dimmed screen → the region is captured
   with the native `screencapture` (only that region, nothing saved to disk) → the character
   walks to the region and looks at it → a speech bubble shows the thumbnail and asks for an

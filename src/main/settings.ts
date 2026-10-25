@@ -15,9 +15,11 @@ export interface Settings {
   claudeModel: string;
   /** Path to the claude binary; found via the login shell when null. */
   claudePath: string | null;
+  /** file:// URL of a user-chosen GLB; null = bundled assets/clippet.glb, else assets/placeholder.glb. */
+  modelUrl: string | null;
 }
 
-const DEFAULTS: Settings = { home: null, scale: 180, shortcut: 'CommandOrControl+Alt+Space', apiKey: null, webSearch: true, backend: 'claude-code', claudeModel: 'sonnet', claudePath: null };
+const DEFAULTS: Settings = { home: null, scale: 180, shortcut: 'CommandOrControl+Alt+Space', apiKey: null, webSearch: true, backend: 'claude-code', claudeModel: 'sonnet', claudePath: null, modelUrl: null };
 
 export function settingsFile(): string {
   return join(app.getPath('userData'), 'settings.json');

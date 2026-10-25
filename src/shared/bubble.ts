@@ -5,19 +5,25 @@ export interface ScreenRect { x: number; y: number; w: number; h: number }
 export type AgentStatus = 'thinking' | 'searching' | 'reading' | 'talking';
 export type Mood = 'happy' | 'neutral' | 'sorry';
 
+export type BubbleActionId = 'open-terminal' | 'check-again' | 'dismiss';
+export interface BubbleAction { id: BubbleActionId; label: string; primary?: boolean }
+
 export type AgentEvent =
   | { type: 'status'; status: AgentStatus }
   | { type: 'delta'; text: string }
   | { type: 'source'; url: string; title: string }
   | { type: 'done'; mood: Mood; text: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; actions?: BubbleAction[] };
 
-export interface BubbleShow { thumbnail: string; rect: ScreenRect }
+export type BubbleShow =
+  | { kind: 'lookup'; thumbnail: string; rect: ScreenRect }
+  | { kind: 'card'; title: string; message: string; actions: BubbleAction[]; tone?: 'info' | 'success' };
 
 export interface BubbleBridge {
   onShow(fn: (p: BubbleShow) => void): void;
   onAgent(fn: (e: AgentEvent) => void): void;
   submit(note: string): void;
+  action(id: BubbleActionId): void;
   close(): void;
   openUrl(url: string): void;
   resize(height: number): void;
@@ -33,6 +39,7 @@ export const BUBBLE_IPC = {
   show: 'bubble:show',
   agent: 'bubble:agent',
   submit: 'bubble:submit',
+  action: 'bubble:action',
   close: 'bubble:close',
   openUrl: 'bubble:openUrl',
   resize: 'bubble:resize',

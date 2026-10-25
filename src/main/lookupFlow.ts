@@ -15,6 +15,8 @@ import type { ScreenRect } from '@shared/bubble';
 export class LookupFlow {
   private busy = false;
   private abort: AbortController | null = null;
+  /** Handles card actions (sign-in buttons) raised during a lookup. */
+  onAction: ((id: import('@shared/bubble').BubbleActionId) => void) | null = null;
 
   constructor(private companion: CompanionWindow, private bubble: BubbleWindow) {}
 
@@ -46,7 +48,8 @@ export class LookupFlow {
       const settings = loadSettings();
       const head = this.companion.toScreen({ x: stand.x, y: stand.y - settings.scale * 0.9 });
 
-      this.bubble.show({ thumbnail, rect }, head, {
+      this.bubble.show({ kind: 'lookup', thumbnail, rect }, head, {
+        onAction: (id) => this.onAction?.(id),
         onSubmit: (note) => void this.run(png, note),
         onClose: () => this.idle(),
       });
@@ -90,8 +93,7 @@ export class LookupFlow {
     const settings = loadSettings();
     const stand = this.standPoint(rect);
     const head = this.companion.toScreen({ x: stand.x, y: stand.y - settings.scale * 0.9 });
-    this.bubble.show({ thumbnail: '', rect }, head, { onSubmit: () => {}, onClose: () => this.idle() });
-    setTimeout(() => this.bubble.agent({ type: 'error', message }), 200);
+    this.bubble.show({ kind: 'card', title: 'Oops', message, actions: [{ id: 'dismiss', label: 'OK', primary: true }] }, head, { onAction: () => this.bubble.hide(), onClose: () => this.idle() });
     this.companion.send({ type: 'react', clip: 'sorry' });
     this.companion.send({ type: 'setState', state: 'idle' });
   }
