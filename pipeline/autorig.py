@@ -380,9 +380,11 @@ def clip_attentive(p: Poser, t: float, s: float) -> None:
 
 
 def clip_thinking(p: Poser, t: float, s: float) -> None:
+    # Reference: one hand to the chin, head tilted toward it, other arm hanging.
     p.breathe(t, 0.5)
-    p.rot("Head", x=-8, z=-12 + 3 * S(t * TAU))
-    p.raise_arm("Right", fwd=35, out=10, elbow=125)
+    p.rot("Head", x=-6, z=-14 + 3 * S(t * TAU))
+    p.raise_arm("Right", fwd=50, out=8, elbow=128)
+    p.rot("RightForeArm", z=12 * p.out_sign)
     p.rot("Spine1", z=-4)
 
 
@@ -417,11 +419,14 @@ def clip_walk(p: Poser, t: float, s: float) -> None:
 
 
 def clip_wave(p: Poser, t: float, s: float) -> None:
-    lift = pulse(t, 0, 0.2) * (1 - pulse(t, 0.8, 1))
+    # Reference: a real wave is forward-and-up with a bent elbow, the forearm near vertical
+    # beside the head, and the hand swinging side to side. Not a lateral raise.
+    lift = pulse(t, 0, 0.22) * (1 - pulse(t, 0.8, 1))
+    swing = S(t * TAU * 3.5) * lift
+    p.raise_arm("Right", fwd=55 * lift, out=(38 + 12 * swing) * lift, elbow=118 * lift)
+    p.rot("RightForeArm", z=-20 * swing * p.out_sign)
+    p.rot("Head", z=-8 * lift, x=-4 * lift); p.rot("Spine2", z=-5 * lift)
     p.hips_up(0.012 * lift * abs(S(t * TAU * 2)))  # a little bounce carries the greeting when the arms cannot
-    p.raise_arm("Right", out=95 * lift, elbow=75 * lift)
-    p.rot("RightForeArm", z=28 * lift * S(t * TAU * 4))
-    p.rot("Head", z=-10 * lift, x=-5 * lift); p.rot("Spine2", z=-6 * lift)
     p.breathe(t, 0.4)
 
 
@@ -432,17 +437,22 @@ def clip_point(p: Poser, t: float, s: float) -> None:
 
 
 def clip_happy(p: Poser, t: float, s: float) -> None:
+    # Reference: both fists raised beside the head, elbows bent, a hop and a head tilt.
     hop = bump(t, 0.1, 0.55)
+    up = pulse(t, 0, 0.3) * (1 - pulse(t, 0.8, 1))
     p.hips_up(0.05 * hop)
-    p.raise_arm("Left", out=70 * hop, elbow=30); p.raise_arm("Right", out=70 * hop, elbow=30)
+    p.raise_arm("Left", fwd=35 * up, out=55 * up, elbow=125 * up)
+    p.raise_arm("Right", fwd=35 * up, out=55 * up, elbow=125 * up)
     p.rot("LeftLeg", x=35 * hop); p.rot("RightLeg", x=35 * hop)
-    p.rot("Head", x=-12 * hop, z=6 * S(t * TAU * 2))
+    p.rot("Head", x=-10 * up, z=8 * S(t * TAU * 2) * up)
 
 
 def clip_sorry(p: Poser, t: float, s: float) -> None:
+    # Reference: head bowed, shoulders slumped, arms hanging a little forward.
     d = pulse(t, 0, 0.3) * (1 - pulse(t, 0.8, 1))
-    p.rot("Head", x=30 * d, z=10 * d); p.rot("Neck", x=8 * d); p.rot("Spine1", x=12 * d); p.rot("Spine2", x=8 * d)
-    p.raise_arm("Left", out=-6 * d); p.raise_arm("Right", out=-6 * d)
+    p.rot("Head", x=32 * d, z=6 * d); p.rot("Neck", x=8 * d); p.rot("Spine1", x=12 * d); p.rot("Spine2", x=8 * d)
+    p.raise_arm("Left", fwd=14 * d, out=-6 * d, elbow=8 * d); p.raise_arm("Right", fwd=14 * d, out=-6 * d, elbow=8 * d)
+    p.rot("LeftShoulder", x=6 * d); p.rot("RightShoulder", x=6 * d)
     p.breathe(t, 0.5)
 
 
