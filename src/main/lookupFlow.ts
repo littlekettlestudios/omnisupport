@@ -4,6 +4,7 @@ import type { BubbleWindow } from './bubbleWindow';
 import { pickRegion } from './picker';
 import { captureRegion, CaptureError } from './capture';
 import { lookup } from './agent';
+import { lookupViaClaudeCode } from './claudeCode';
 import { loadSettings, settingsFile } from './settings';
 import type { ScreenRect } from '@shared/bubble';
 
@@ -62,7 +63,7 @@ export class LookupFlow {
     this.companion.send({ type: 'setState', state: 'thinking' });
 
     let talking = false;
-    await lookup({ imagePng: png, note }, (ev) => {
+    const onEvent = (ev: import('@shared/bubble').AgentEvent): void => {
       this.bubble.agent(ev);
       if (ev.type === 'status') {
         if (ev.status === 'searching' || ev.status === 'reading') this.companion.send({ type: 'setState', state: 'searching' });
@@ -77,7 +78,12 @@ export class LookupFlow {
         this.companion.send({ type: 'react', clip: 'sorry' });
         this.companion.send({ type: 'setState', state: 'idle' });
       }
-    }, { apiKey, webSearch: settings.webSearch, signal: this.abort.signal, settingsPath: settingsFile() });
+    };
+    if (settings.backend === 'api') {
+      await lookup({ imagePng: png, note }, onEvent, { apiKey, webSearch: settings.webSearch, signal: this.abort.signal, settingsPath: settingsFile() });
+    } else {
+      await lookupViaClaudeCode({ imagePng: png, note }, onEvent, { model: settings.claudeModel, claudePath: settings.claudePath ?? undefined, webSearch: settings.webSearch, signal: this.abort.signal });
+    }
   }
 
   private showError(rect: ScreenRect, message: string): void {

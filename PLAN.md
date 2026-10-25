@@ -37,9 +37,11 @@ reading the clipboard, multiple characters.
   transparent frameless always-on-top windows, `setIgnoreMouseEvents(true, {forward: true})`
   for click-through, `globalShortcut`, `Tray`, `desktopCapturer`.
 - **Three.js** in the companion window: `GLTFLoader`, `AnimationMixer`, transparent canvas.
-- **`@anthropic-ai/sdk`** in the main process only. Model `claude-opus-5-5`, adaptive
-  thinking (default), streaming, and the server tools `web_search_20260209` and
-  `web_fetch_20260209`. No separate search provider.
+- **Two lookup backends** in the main process. Default: the local Claude Code CLI in
+  headless mode (`claude -p` with Read, WebSearch and WebFetch, stream-json output), which
+  runs on the Claude subscription login and costs no API credit. Alternative:
+  `@anthropic-ai/sdk` with `claude-opus-5-5`, streaming, and the `web_search_20260209` /
+  `web_fetch_20260209` server tools. No separate search provider either way.
 - **Blender 4.2** (already on your PATH for LKF) for decimation and GLB re-export.
 - No Python in this repo. LKF stays where it is; this repo only consumes its GLB.
 

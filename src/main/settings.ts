@@ -9,9 +9,15 @@ export interface Settings {
   /** Anthropic API key. ANTHROPIC_API_KEY in the environment takes precedence. Keychain storage is M4. */
   apiKey: string | null;
   webSearch: boolean;
+  /** 'claude-code' spawns the local Claude Code CLI (subscription login); 'api' uses the Anthropic API with apiKey. */
+  backend: 'claude-code' | 'api';
+  /** Model alias or id for the Claude Code backend. */
+  claudeModel: string;
+  /** Path to the claude binary; found via the login shell when null. */
+  claudePath: string | null;
 }
 
-const DEFAULTS: Settings = { home: null, scale: 180, shortcut: 'CommandOrControl+Alt+Space', apiKey: null, webSearch: true };
+const DEFAULTS: Settings = { home: null, scale: 180, shortcut: 'CommandOrControl+Alt+Space', apiKey: null, webSearch: true, backend: 'claude-code', claudeModel: 'sonnet', claudePath: null };
 
 export function settingsFile(): string {
   return join(app.getPath('userData'), 'settings.json');

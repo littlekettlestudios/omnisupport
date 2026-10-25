@@ -9,11 +9,29 @@ and it looks it up for you. See [PLAN.md](PLAN.md) for the full plan and
 ```bash
 npm install
 node node_modules/electron/install.js   # once, if node_modules/electron/dist is empty
-npm run build && ANTHROPIC_API_KEY=sk-ant-... npx electron .
+npm run build && npx electron .
 ```
 
-The key can also go in `~/Library/Application Support/Clippet/settings.json` as `"apiKey"`
-(Keychain storage is planned for M4). `npm run dev` runs with hot reload.
+`npm run dev` runs with hot reload.
+
+## Backends
+
+The lookup can run two ways, chosen by `"backend"` in
+`~/Library/Application Support/Clippet/settings.json`:
+
+- `"claude-code"` (default): spawns your locally installed Claude Code CLI in headless mode
+  (`claude -p`), so it runs on the login the CLI already has, normally a Claude
+  subscription. Sign in once by running `claude` in a terminal. Clippet never reads or
+  stores credentials; it strips `ANTHROPIC_API_KEY` from the child so the subscription is
+  used. Model via `"claudeModel"` (`sonnet` by default, `opus` for deeper answers; both
+  count against the subscription limits at different rates). `"claudePath"` overrides
+  binary discovery. Anthropic's terms allow you to sign in to your own Claude Code with
+  your own subscription; distributing Clippet to other people so it routes through their
+  subscriptions needs Anthropic's approval, so treat this backend as personal use.
+- `"api"`: calls the Anthropic API directly with `claude-opus-5-5`, web search and web fetch
+  server tools and server-side refusal fallbacks. Needs `ANTHROPIC_API_KEY` in the
+  environment or `"apiKey"` in settings.json (Keychain storage is planned for M4). Pay per
+  call.
 `CLIPPET_DEBUG=1` logs hover, click and drag events; `CLIPPET_DEBUG=flow` also opens the
 region picker once, 2.5 s after launch.
 
@@ -25,8 +43,8 @@ region picker once, 2.5 s after launch.
 - The lookup loop: shortcut → drag a rectangle on the dimmed screen → the region is captured
   with the native `screencapture` (only that region, nothing saved to disk) → the character
   walks to the region and looks at it → a speech bubble shows the thumbnail and asks for an
-  optional note → Claude (`claude-opus-5-5`, web search and web fetch enabled, answers
-  streamed) replies in the bubble with sources. Esc or × closes it.
+  optional note → Claude (through Claude Code or the API, see Backends; web search on,
+  answers streamed) replies in the bubble with sources. Esc or × closes it.
 - The character is a procedural placeholder until `assets/placeholder.glb` or the rigged
   `assets/clippet.glb` exists. The renderer in `src/renderer/companion/` is Codex's
   workstream; see [docs/codex-brief.md](docs/codex-brief.md) and the paste-ready

@@ -3,7 +3,7 @@ import type { AgentEvent, Mood } from '@shared/bubble';
 
 const MODEL = 'claude-opus-5-5';
 
-const SYSTEM = `You are Clippet, a small, cheerful desktop companion. The user has selected a region of their screen and may have added a note. Help them with whatever that region shows: an error, a confusing setting, a product, a word, a message, a piece of code.
+export const SYSTEM = `You are Clippet, a small, cheerful desktop companion. The user has selected a region of their screen and may have added a note. Help them with whatever that region shows: an error, a confusing setting, a product, a word, a message, a piece of code.
 
 How to answer:
 - First line: one sentence that says what this is or what is wrong. No preamble, do not describe the screenshot back.
@@ -13,7 +13,7 @@ How to answer:
 - Never ask the user to paste passwords or keys.
 - On the very last line, alone, write [mood: happy] if you solved it, [mood: neutral] if you explained it, or [mood: sorry] if you could not help.`;
 
-const MOOD_RE = /\s*\[mood:\s*(happy|neutral|sorry)\]\s*$/i;
+export const MOOD_RE = /\s*\[mood:\s*(happy|neutral|sorry)\]\s*$/i;
 
 export interface LookupInput {
   imagePng: Buffer;
