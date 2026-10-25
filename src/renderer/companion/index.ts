@@ -1,5 +1,6 @@
-// M0 placeholder companion. Codex replaces this file with the real renderer; the
-// protocol handling (hover → click-through, drag, moveTo, states) is the part to keep.
+// Placeholder companion renderer. Codex replaces this file with the real renderer; the
+// protocol handling (hover → click-through, drag, moveTo, states, reactions, idle frame
+// rate) and the clip mapping below are the parts to keep.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Command, CompanionState, ReactionClip } from '@shared/protocol';
@@ -37,7 +38,6 @@ const root = new THREE.Group();
 scene.add(root);
 let scale = config.scale;
 
-// Shadow catcher under the feet.
 const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.ShadowMaterial({ opacity: 0.25 }));
 shadowPlane.rotation.x = -Math.PI / 2;
 shadowPlane.receiveShadow = true;
@@ -47,6 +47,61 @@ root.add(shadowPlane);
 const body = new THREE.Group();
 root.add(body);
 let hitVolume: THREE.Mesh;
+
+// ---- clips ----------------------------------------------------------------
+let mixer: THREE.AnimationMixer | null = null;
+const actions = new Map<string, THREE.AnimationAction>();
+let headBone: THREE.Object3D | null = null;
+let loopAction: THREE.AnimationAction | null = null;
+let loopName = '';
+let reactionAction: THREE.AnimationAction | null = null;
+
+/** Which clip to use for a state when the named one is missing. */
+const LOOP_FALLBACK: Record<CompanionState, string[]> = {
+  idle: ['idle'],
+  attentive: ['attentive', 'idle'],
+  thinking: ['thinking', 'idle'],
+  searching: ['searching', 'thinking', 'idle'],
+  talking: ['talking', 'idle'],
+  sleeping: ['sleeping', 'idle'],
+};
+const REACTION_FALLBACK: Record<ReactionClip, string[]> = {
+  wave: ['wave', 'happy'], point: ['point', 'wave'], happy: ['happy', 'excited', 'nod'],
+  sorry: ['sorry', 'nod'], excited: ['excited', 'happy'], nod: ['nod', 'happy'],
+};
+
+function findAction(names: string[]): THREE.AnimationAction | null {
+  for (const n of names) { const a = actions.get(n); if (a) return a; }
+  return null;
+}
+
+function playLoop(names: string[]): void {
+  const next = findAction(names);
+  if (!next) return;
+  const name = next.getClip().name;
+  if (next === loopAction) return;
+  next.reset().setLoop(THREE.LoopRepeat, Infinity).setEffectiveWeight(1).fadeIn(0.25).play();
+  loopAction?.fadeOut(0.25);
+  loopAction = next;
+  loopName = name;
+}
+
+function playOnce(names: string[]): void {
+  const act = findAction(names);
+  if (!act || !mixer) return;
+  if (reactionAction && reactionAction !== act) reactionAction.fadeOut(0.1);
+  act.reset().setLoop(THREE.LoopOnce, 1).setEffectiveWeight(1).fadeIn(0.1).play();
+  act.clampWhenFinished = true;
+  loopAction?.fadeOut(0.15);
+  reactionAction = act;
+}
+
+function onClipFinished(e: { action: THREE.AnimationAction }): void {
+  if (e.action !== reactionAction) return;
+  reactionAction.fadeOut(0.25);
+  reactionAction = null;
+  loopAction?.reset().fadeIn(0.25).play();
+}
 
 function buildPlaceholder(): void {
   body.clear();
@@ -71,10 +126,12 @@ function buildPlaceholder(): void {
 }
 
 async function loadModel(url: string): Promise<{ hasRig: boolean; clips: string[] }> {
+  mixer?.removeEventListener('finished', onClipFinished);
+  mixer = null; actions.clear(); headBone = null; loopAction = null; reactionAction = null; loopName = '';
   try {
     const gltf = await new GLTFLoader().loadAsync(url);
     body.clear();
-    gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+    gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     body.add(gltf.scene);
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const size = box.getSize(new THREE.Vector3());
@@ -86,6 +143,14 @@ async function loadModel(url: string): Promise<{ hasRig: boolean; clips: string[
     body.add(hitVolume);
     let hasRig = false;
     gltf.scene.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) hasRig = true; });
+    // GLTFLoader strips the colon from "mixamorig:Head"; accept either spelling.
+    gltf.scene.traverse((o) => { if (!headBone && /^mixamorig:?Head$/.test(o.name)) headBone = o; });
+    if (gltf.animations.length) {
+      mixer = new THREE.AnimationMixer(gltf.scene);
+      mixer.addEventListener('finished', onClipFinished);
+      for (const clip of gltf.animations) actions.set(clip.name, mixer.clipAction(clip));
+      playLoop(LOOP_FALLBACK[state]);
+    }
     return { hasRig, clips: gltf.animations.map((a) => a.name) };
   } catch (err) {
     console.warn('[companion] no model at', url, '- using placeholder', err);
@@ -105,17 +170,24 @@ let facing = 1; // +1 faces +x (right), -1 left
 
 function apply(cmd: Command): void {
   switch (cmd.type) {
-    case 'setState': state = cmd.state; break;
+    case 'setState':
+      state = cmd.state;
+      if (!move) playLoop(LOOP_FALLBACK[state]);
+      break;
     case 'moveTo': {
       const to = toWorld(cmd.x, cmd.y);
       if (!cmd.walk) { pos.copy(to); move = null; bridge.send({ type: 'arrived', x: cmd.x, y: cmd.y }); break; }
       const dist = pos.distanceTo(to);
       move = { from: pos.clone(), to, t: 0, dur: Math.min(1.2, Math.max(0.25, dist / 1400)) };
       facing = to.x >= pos.x ? 1 : -1;
+      if (actions.has('walk')) { playLoop(['walk']); if (loopAction) loopAction.timeScale = 1.6; }
       break;
     }
     case 'lookAt': lookTarget = cmd.x == null || cmd.y == null ? null : toWorld(cmd.x, cmd.y); break;
-    case 'react': reaction = { clip: cmd.clip, t: 0 }; break;
+    case 'react':
+      if (mixer) playOnce(REACTION_FALLBACK[cmd.clip]);
+      else reaction = { clip: cmd.clip, t: 0 };
+      break;
     case 'setVisible': visible = cmd.visible; root.visible = visible; break;
     case 'setScale': scale = cmd.scale; break;
     case 'reload': void loadModel(cmd.modelUrl); break;
@@ -170,28 +242,36 @@ window.addEventListener('pointerup', () => {
 });
 window.addEventListener('pointerleave', () => { if (leaveTimer) clearTimeout(leaveTimer); leaveTimer = null; setOver(false); });
 
-// ---- procedural animation --------------------------------------------------
+// ---- animation loop -------------------------------------------------------
 const clock = new THREE.Clock();
 let idleFrames = 0;
+let headYawNow = 0, headPitchNow = 0;
 const easeInOut = (t: number): number => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
 function animate(): void {
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
   const rm = config.reducedMotion;
+  const rigged = mixer !== null;
 
   if (move) {
     move.t += dt;
     const k = easeInOut(Math.min(1, move.t / move.dur));
     pos.lerpVectors(move.from, move.to, k);
-    if (move.t >= move.dur) { const c = toCanvas(move.to.x, move.to.y); move = null; bridge.send({ type: 'arrived', x: c.x, y: c.y }); }
+    if (move.t >= move.dur) {
+      const c = toCanvas(move.to.x, move.to.y);
+      move = null;
+      if (loopAction) loopAction.timeScale = 1;
+      playLoop(LOOP_FALLBACK[state]);
+      bridge.send({ type: 'arrived', x: c.x, y: c.y });
+    }
   }
   root.position.set(pos.x, pos.y, 0);
 
-  // Base pose per state.
+  // Procedural base pose; most of it is replaced by clips on a rigged model.
   let bob = 0, sx = 1, sy = 1, tilt = 0, headYaw = 0, headPitch = 0;
   const walking = move !== null;
-  if (!rm) {
+  if (!rm && !rigged) {
     switch (state) {
       case 'idle': bob = Math.sin(t * 2) * 0.012; sy = 1 + Math.sin(t * 2) * 0.01; sx = 1 - Math.sin(t * 2) * 0.01; break;
       case 'attentive': bob = Math.abs(Math.sin(t * 6)) * 0.03; headYaw = Math.sin(t * 3) * 0.25; break;
@@ -203,7 +283,7 @@ function animate(): void {
     if (walking) { bob = Math.abs(Math.sin(t * 14)) * 0.06; tilt = Math.sin(t * 14) * 0.08; }
   }
 
-  // One-shot reactions overlay the state and return.
+  // Procedural one-shot reactions (unrigged model only).
   if (reaction) {
     reaction.t += dt;
     const r = reaction.t;
@@ -220,16 +300,26 @@ function animate(): void {
     if (done) reaction = null;
   }
 
-  // Look-at: turn head (and lean) toward the target.
-  const head = body.getObjectByName('head');
+  // Look-at: turn the head (and lean a little) toward the target.
   if (lookTarget) {
     const dx = lookTarget.x - pos.x, dy = lookTarget.y - (pos.y + scale * 0.85);
     const yaw = THREE.MathUtils.clamp(Math.atan2(dx, 600), -0.7, 0.7);
     const pitch = THREE.MathUtils.clamp(-Math.atan2(dy, 600), -0.5, 0.5);
-    headYaw += yaw; headPitch += pitch; tilt += yaw * 0.15;
+    headYaw += yaw; headPitch += pitch; tilt += yaw * 0.1;
     if (Math.abs(dx) > 20) facing = dx > 0 ? 1 : -1;
   }
-  if (head) { head.rotation.y += (headYaw - head.rotation.y) * 0.15; head.rotation.x += (headPitch - head.rotation.x) * 0.15; }
+  headYawNow += (headYaw - headYawNow) * 0.15;
+  headPitchNow += (headPitch - headPitchNow) * 0.15;
+
+  if (mixer) {
+    mixer.update(dt);
+    // Additive on top of the clip: the mixer wrote the bone this frame, so rotate after it.
+    // Bone local +X tips the head back on this rig (Blender roll), so negate the pitch.
+    if (headBone) { headBone.rotateY(headYawNow); headBone.rotateX(-headPitchNow); }
+  } else {
+    const head = body.getObjectByName('head');
+    if (head) { head.rotation.y = headYawNow; head.rotation.x = headPitchNow; }
+  }
 
   body.scale.set(scale * sx, scale * sy, scale);
   body.position.y = bob * scale;
@@ -240,7 +330,7 @@ function animate(): void {
   renderer.render(scene, camera);
 
   // Idle at ~10 fps when nothing is happening and the pointer is away.
-  const busy = move || reaction || over || drag || (state !== 'idle' && state !== 'sleeping');
+  const busy = move || reaction || reactionAction || over || drag || (state !== 'idle' && state !== 'sleeping') || !!lookTarget;
   idleFrames = busy ? 0 : idleFrames + 1;
   if (!busy && idleFrames > 30) setTimeout(() => requestAnimationFrame(animate), 100);
   else requestAnimationFrame(animate);

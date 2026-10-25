@@ -46,6 +46,18 @@ app.whenReady().then(() => {
 
   // CLIPPET_DEBUG=flow: open the picker once on launch so the flow can be checked without a keyboard.
   if (process.env['CLIPPET_DEBUG'] === 'flow') setTimeout(lookAtSomething, 2500);
+  // CLIPPET_DEBUG=pose: cycle a few states and reactions so clip playback can be eyeballed.
+  if (process.env['CLIPPET_DEBUG'] === 'pose') {
+    const seq: Array<() => void> = [
+      () => companion.send({ type: 'react', clip: 'wave' }),
+      () => companion.send({ type: 'setState', state: 'thinking' }),
+      () => companion.send({ type: 'setState', state: 'searching' }),
+      () => { companion.send({ type: 'setState', state: 'idle' }); companion.send({ type: 'lookAt', x: companion.feet.x + 300, y: companion.feet.y - 400 }); },
+      () => { companion.send({ type: 'lookAt', x: null, y: null }); companion.send({ type: 'react', clip: 'happy' }); },
+      () => companion.send({ type: 'setState', state: 'sleeping' }),
+    ];
+    seq.forEach((fn, i) => setTimeout(fn, 2500 + i * 3000));
+  }
 
   const ok = globalShortcut.register(settings.shortcut, lookAtSomething);
   if (!ok) console.error('[clippet] could not register shortcut', settings.shortcut);

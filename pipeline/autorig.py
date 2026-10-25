@@ -230,6 +230,29 @@ class Poser:
         self.arm_motion = arm_motion  # 1 = full swings; ~0.35 when the arms are fused to the body
         for pb in arm.pose.bones:
             pb.rotation_mode = "XYZ"
+        self.pitch_sign, self.out_sign, self.fwd_sign = self.calibrate()
+
+    def _tail_delta(self, bone: str, axis: int, rad: float) -> Vector:
+        """World displacement of a bone's tail when rotated about one local axis."""
+        pb = self.arm.pose.bones[bone]
+        before = (self.arm.matrix_world @ pb.tail).copy()
+        r = [0.0, 0.0, 0.0]; r[axis] = rad
+        pb.rotation_euler = r
+        bpy.context.view_layer.update()
+        after = (self.arm.matrix_world @ pb.tail).copy()
+        pb.rotation_euler = (0, 0, 0)
+        bpy.context.view_layer.update()
+        return after - before
+
+    def calibrate(self) -> tuple[float, float, float]:
+        """Bone rolls differ between Blender versions and import paths, so measure which
+        way each local axis turns instead of assuming: +pitch must tip the head forward
+        (-Y), +out must swing the left arm outward (+X), +fwd must swing it forward (-Y)."""
+        pitch = -1.0 if self._tail_delta("mixamorig:Head", 0, 0.5).y > 0 else 1.0
+        out = -1.0 if self._tail_delta("mixamorig:LeftArm", 2, 0.5).x < 0 else 1.0
+        fwd = -1.0 if self._tail_delta("mixamorig:LeftArm", 0, 0.5).y > 0 else 1.0
+        print(f"AUTORIG_AXES pitch_sign={pitch} out_sign={out} fwd_sign={fwd}")
+        return pitch, out, fwd
 
     def reset(self) -> None:
         for pb in self.arm.pose.bones:
@@ -265,7 +288,7 @@ class Poser:
         pb = self.arm.pose.bones.get(f"mixamorig:{bone}")
         if pb:
             r = pb.rotation_euler
-            pb.rotation_euler = (r.x + math.radians(x), r.y + math.radians(y), r.z + math.radians(z))
+            pb.rotation_euler = (r.x + math.radians(x) * self.pitch_sign, r.y + math.radians(y), r.z + math.radians(z))
 
     def hips_up(self, metres: float) -> None:
         pb = self.arm.pose.bones["mixamorig:Hips"]
@@ -275,10 +298,13 @@ class Poser:
         """out: lift sideways (deg), fwd: swing forward, elbow: bend the forearm."""
         s = 1 if side == "Left" else -1
         k = self.arm_motion
-        self.rot(f"{side}Arm", x=-fwd * k, z=-s * out * k)
-        self.rot(f"{side}ForeArm", x=-elbow * k)
+        # rot() already applies pitch_sign to x; fwd and elbow are "pitch" moves on arm bones
+        # whose rest direction is down, so they take fwd_sign relative to pitch_sign.
+        fx = self.fwd_sign * self.pitch_sign
+        self.rot(f"{side}Arm", x=fwd * k * fx, z=s * out * k * self.out_sign)
+        self.rot(f"{side}ForeArm", x=elbow * k * fx)
         if k < 1:  # fused arms: show the intent with the shoulder instead
-            self.rot(f"{side}Shoulder", z=-s * out * 0.12, x=-fwd * 0.08)
+            self.rot(f"{side}Shoulder", z=s * out * 0.12 * self.out_sign, x=fwd * 0.08 * fx)
 
     def breathe(self, t: float, amp: float = 1.0) -> None:
         b = math.sin(t * 2 * math.pi)
