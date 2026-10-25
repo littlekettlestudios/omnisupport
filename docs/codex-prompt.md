@@ -19,7 +19,7 @@ Scope:
 - Load the GLB from `config.modelUrl` with `GLTFLoader`. Support both a static unrigged mesh (fall back to procedural motion for every state and reaction) and a Mixamo-rigged mesh with the clips named in the protocol (use `AnimationMixer`, crossfade loops, overlay one-shot reactions, drive `mixamorig:Head`/`Neck`/`Spine1` for `lookAt`). Missing clips fall back to procedural motion, never to a frozen pose.
 - Orthographic camera in canvas pixels, transparent canvas, shadow catcher under the feet, nothing visible outside the body.
 - Build a dev harness at `src/renderer/companion/dev/index.html` that fakes `window.clippet` with buttons for every command and a toggle between a placeholder GLB and a rigged GLB, so the renderer can be tested in a plain browser with `npx vite src/renderer/companion/dev`.
-- There is no GLB in `assets/` yet. Use any small humanoid GLB you can generate or find for development, but do not commit model files larger than 2 MB; the real asset arrives later as `assets/clippet.glb`.
+- `assets/clippet.glb` is a rigged stand-in character (Mixamo bone names, all 13 protocol clips, made by `pipeline/autorig.py`) and `assets/placeholder.glb` is the same character unrigged. Build against both. Do not commit other model files; the final character replaces `clippet.glb` later.
 
 Verify before finishing: `npm run typecheck` and `npm run build` pass; the dev harness shows a visibly different motion for every state and reaction on both model types; `hover` fires only on change, with no flicker when the pointer skims the body edge; walking across a 1440 px display takes at most 1.2 s and lands exactly on the requested point.
 

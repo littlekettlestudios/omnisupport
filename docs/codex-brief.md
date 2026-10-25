@@ -18,7 +18,7 @@ A Three.js scene in a transparent window that:
    - `assets/placeholder.glb`: static mesh, no rig, no clips. Every state must have a
      procedural version: bob, squash-and-stretch on state change, lean toward the look
      target, hop on `excited`, droop on `sorry`, a side-to-side tilt loop on `searching`.
-   - `assets/clippet.glb`: Mixamo-rigged, clips named as in the protocol table. Use
+   - `assets/clippet.glb`: rigged with Mixamo bone names and the protocol's clip names (today a stand-in made by `pipeline/autorig.py`; later a Mixamo rig of the final art). Use
      `AnimationMixer`; drive `mixamorig:Head` / `Neck` / `Spine1` for `lookAt` with
      clamping and smoothing. Clips missing from the file fall back to the procedural
      versions, never to a frozen pose.

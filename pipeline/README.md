@@ -81,3 +81,19 @@ blender -b --factory-startup -P pipeline/assemble.py -- --rigged build/testrig/r
 Fallback: Blender Rigify metarig scaled to the mesh, automatic weights, then retarget
 the same Mixamo clips with Rokoko Studio Live (free) or Auto-Rig Pro's remap. Keep the
 Mixamo bone names so the renderer's `lookAt` keeps working.
+
+## Alternative to Mixamo: auto-rig in Blender
+
+```bash
+blender -b --factory-startup -P pipeline/autorig.py -- \
+  --input build/mixamo/clippet_lowpoly.glb --out assets/clippet.glb --poses build/poses
+```
+
+Takes the clean mesh from step 1 (the `--glb` output), fits a Mixamo-named humanoid
+armature from silhouette landmarks (head, neck, shoulders, crotch, knees, ankles), skins
+it with automatic weights, fades arm influence out of the torso silhouette (arms drawn
+against the body would otherwise drag the chest), keyframes every protocol clip
+procedurally, and exports the rigged GLB. `--poses` renders one frame per clip for a
+quick look. About 10 s. The motion is simple and cheerful rather than mocap; swap in
+Mixamo clips through `assemble.py` whenever you want better. Because the bone names are
+Mixamo's, the renderer's head look-at works with either.
