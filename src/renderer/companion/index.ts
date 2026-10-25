@@ -183,7 +183,7 @@ async function loadModel(url: string): Promise<{ hasRig: boolean; clips: string[
         faceMaterial.transparent = true;
         faceMaterial.depthWrite = false;
         faceMaterial.emissive = new THREE.Color(0xffffff);
-        faceMaterial.emissiveIntensity = 0.6;
+        faceMaterial.emissiveIntensity = 1.0;
         m.renderOrder = 2;
       }
     });
@@ -376,7 +376,7 @@ function animate(): void {
   if (faceMaterial) {
     const name = reactionAction?.getClip().name ?? '';
     setFace(REACTION_MOOD[name] ?? STATE_MOOD[state]);
-    const target = state === 'sleeping' && !reactionAction ? 0.08 : 0.6;
+    const target = state === 'sleeping' && !reactionAction ? 0.1 : 1.0;
     faceMaterial.emissiveIntensity += (target - faceMaterial.emissiveIntensity) * 0.1;
   }
   if (mixer) {

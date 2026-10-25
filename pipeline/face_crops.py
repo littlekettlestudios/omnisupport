@@ -5,7 +5,7 @@
         thinking=assets/chibi-ai-poses/thinking.png sorry=assets/chibi-ai-poses/sad-task-failed.png
 
 For each image: find the dark screen in the upper part of the picture, crop it with a
-margin, mask it with a soft rounded rectangle, and save a 512x384 PNG. The renderer puts these on the FaceScreen
+margin, keep only the glowing features (transparent elsewhere), shrink them a little toward the\ncentre, and save a 512x384 PNG. The renderer puts these on the FaceScreen
 patch that autorig.py adds to the rig.
 """
 
@@ -24,6 +24,8 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--size", default="512x384")
+    ap.add_argument("--feature-offset-y", type=float, default=0.02, help="move the features down by this fraction of the screen height")
+    ap.add_argument("--feature-scale", type=float, default=0.95, help="shrink the features toward the screen centre (references draw the eyes larger than the model)")
     ap.add_argument("pairs", nargs="+", help="mood=path.png")
     return ap.parse_args(argv)
 
@@ -93,14 +95,26 @@ def main() -> None:
         px = load(Path(path).resolve())
         x0, y0, x1, y1 = screen_bbox(px)
         crop = px[y0:y1 + 1, x0:x1 + 1].copy()      # the dark screen, edge to edge
-        crop = resize(crop, W, H)
-        # Rounded-rectangle (superellipse) mask with a soft edge: the patch in the rig is
-        # sized to the modelled screen, so the mask, not the picture, defines the shape.
+        # Only the glowing features (eyes, brows, mouth) are kept; the model keeps its own
+        # screen and bezel underneath. Alpha from brightness, gated to cyan-ish pixels.
+        rgb = crop[..., :3]
+        mx = rgb.max(axis=2)
+        cyan = (rgb[..., 2] > rgb[..., 0] + 0.22) & (rgb[..., 1] > rgb[..., 0] + 0.12)  # the glow, not greyish reflections
+        alpha = np.clip((mx - 0.30) / 0.22, 0, 1) * cyan
+        alpha = (alpha + np.roll(alpha, 1, 0) + np.roll(alpha, -1, 0) + np.roll(alpha, 1, 1) + np.roll(alpha, -1, 1)) / 5
+        crop[..., 3] = alpha
+        # Zoom out by feature-scale around the centre; the border samples clamp to the edge.
+        h, w, _ = crop.shape
+        k = args.feature_scale
+        ys = np.clip(((np.arange(H) + 0.5) / H - 0.5 - args.feature_offset_y) / k * h + h / 2, 0, h - 1).astype(int)
+        xs = np.clip(((np.arange(W) + 0.5) / W - 0.5) / k * w + w / 2, 0, w - 1).astype(int)
+        crop = crop[ys][:, xs]
+        # Nothing outside the screen's rounded rectangle, whatever the clamp brought in.
         yy, xx = np.mgrid[0:H, 0:W]
         u = (xx + 0.5) / W * 2 - 1
         v = (yy + 0.5) / H * 2 - 1
         r = (np.abs(u) ** 3.2 + np.abs(v) ** 3.2) ** (1 / 3.2)
-        crop[..., 3] = 1.0 - np.clip((r - 0.93) / 0.06, 0, 1)
+        crop[..., 3] *= 1.0 - np.clip((r - 0.78) / 0.08, 0, 1)
         save(out / f"{mood}.png", crop)
         print(f"FACE_OK {mood} bbox=({x0},{y0},{x1},{y1}) -> {out / (mood + '.png')}")
 

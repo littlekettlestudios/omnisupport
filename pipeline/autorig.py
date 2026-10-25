@@ -296,6 +296,26 @@ def add_face_screen(mesh_obj: bpy.types.Object, arm: bpy.types.Object, L: dict, 
     lum = px[sy, sx, :3].mean(axis=1)
     front_half = v[:, 1] < float(np.median(v[(v[:, 2] > head_lo) & (v[:, 2] < head_hi)][:, 1]))
     dark = (lum < 0.24) & (v[:, 2] > head_lo) & (v[:, 2] < head_hi) & front_half
+    if dark.sum() >= 20:
+        # The screen is one connected dark patch; dark panels elsewhere on the head are
+        # other patches. Keep the connected component that holds the most forward vertex.
+        adj: dict[int, list[int]] = {}
+        for e in me.edges:
+            a, b = e.vertices
+            if dark[a] and dark[b]:
+                adj.setdefault(a, []).append(b)
+                adj.setdefault(b, []).append(a)
+        seed = int(np.where(dark)[0][np.argmin(v[dark][:, 1])])
+        comp = {seed}
+        stack = [seed]
+        while stack:
+            for nb in adj.get(stack.pop(), []):
+                if nb not in comp:
+                    comp.add(nb)
+                    stack.append(nb)
+        keep = np.zeros_like(dark)
+        keep[list(comp)] = True
+        dark &= keep
     if dark.sum() < 20:
         return {"face": f"skipped: only {int(dark.sum())} dark head vertices"}
     d = v[dark]
@@ -303,8 +323,35 @@ def add_face_screen(mesh_obj: bpy.types.Object, arm: bpy.types.Object, L: dict, 
     z0, z1 = np.percentile(d[:, 2], 1), np.percentile(d[:, 2], 99)
     centre_x, centre_z = float((x0 + x1) / 2), float((z0 + z1) / 2)
     front_y = float(d[:, 1].min())
-    w = float(x1 - x0) * 1.06
-    h = float(z1 - z0) * 1.06
+    w = float(x1 - x0) * 0.98
+    h = float(z1 - z0) * 0.98
+
+    # Paint the modelled screen blank in the baked texture so its eyes never show through
+    # the patch: fill the UV triangles of faces whose vertices are all screen vertices.
+    screen_col = np.median(px[sy[dark], sx[dark], :3], axis=0)
+    # Every front-facing face inside the screen's box, eyes included (those are bright).
+    in_screen = (v[:, 0] >= x0 + 0.004 * H) & (v[:, 0] <= x1 - 0.004 * H) & (v[:, 2] >= z0 + 0.004 * H) & (v[:, 2] <= z1 - 0.004 * H) & front_half
+    painted = 0
+    for poly in me.polygons:
+        vids = [me.loops[li].vertex_index for li in poly.loop_indices]
+        if not all(in_screen[i] for i in vids):
+            continue
+        pts = np.array([(uvs[li].uv[0] * iw, uvs[li].uv[1] * ih) for li in poly.loop_indices])
+        bx0, by0 = np.floor(pts.min(axis=0)).astype(int) - 1
+        bx1, by1 = np.ceil(pts.max(axis=0)).astype(int) + 1
+        bx0, by0, bx1, by1 = max(bx0, 0), max(by0, 0), min(bx1, iw - 1), min(by1, ih - 1)
+        if bx1 <= bx0 or by1 <= by0:
+            continue
+        gy, gx = np.mgrid[by0:by1 + 1, bx0:bx1 + 1]
+        inside = np.ones(gx.shape, dtype=bool)
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            ex, ey = pts[b] - pts[a]
+            cross = ex * (gy + 0.5 - pts[a][1]) - ey * (gx + 0.5 - pts[a][0])
+            inside &= cross >= -1.5 if np.cross(pts[1] - pts[0], pts[2] - pts[0]) > 0 else cross <= 1.5
+        px[gy[inside], gx[inside], :3] = screen_col
+        painted += int(inside.sum())
+    img.pixels[:] = px.ravel()
+    img.pack()
 
     bpy.ops.mesh.primitive_grid_add(x_subdivisions=28, y_subdivisions=20, size=1.0, location=(centre_x, front_y - 0.04, centre_z), rotation=(math.pi / 2, 0, 0))
     patch = bpy.context.active_object
@@ -334,7 +381,7 @@ def add_face_screen(mesh_obj: bpy.types.Object, arm: bpy.types.Object, L: dict, 
     links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
     links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
-    bsdf.inputs["Emission Strength"].default_value = 0.6
+    bsdf.inputs["Emission Strength"].default_value = 1.0
     bsdf.inputs["Roughness"].default_value = 0.35
     patch.data.materials.append(mat)
 
@@ -343,7 +390,7 @@ def add_face_screen(mesh_obj: bpy.types.Object, arm: bpy.types.Object, L: dict, 
     patch.parent = arm
     mod = patch.modifiers.new("Armature", "ARMATURE")
     mod.object = arm
-    return {"face": str(face_png), "face_centre": [round(centre_x, 3), round(front_y, 3), round(centre_z, 3)], "face_size": [round(w, 3), round(h, 3)], "screen_verts": int(dark.sum())}
+    return {"face": str(face_png), "face_centre": [round(centre_x, 3), round(front_y, 3), round(centre_z, 3)], "face_size": [round(w, 3), round(h, 3)], "screen_verts": int(dark.sum()), "screen_pixels_painted": painted}
 
 
 # ---------------------------------------------------------------- clips
