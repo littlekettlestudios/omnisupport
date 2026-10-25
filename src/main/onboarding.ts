@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import type { CompanionWindow } from './companionWindow';
 import type { BubbleWindow } from './bubbleWindow';
 import { findClaude } from './claudeCode';
-import { loadSettings } from './settings';
+import { loadSettings, shortcutLabel } from './settings';
 import type { BubbleAction } from '@shared/bubble';
 
 export type SignInState = 'ok' | 'signed-out' | 'missing';
@@ -84,8 +84,7 @@ export class Onboarding {
       if (state === 'ok') {
         this.companion.send({ type: 'react', clip: 'happy' });
         this.companion.send({ type: 'setState', state: 'idle' });
-        const s = loadSettings();
-        const label = s.shortcut.replace('CommandOrControl', '⌘').replace('Alt', '⌥').replaceAll('+', '');
+        const label = shortcutLabel();
         this.bubble.show(
           { kind: 'card', title: 'All set!', message: `Press ${label} and drag over anything on screen. I will look it up.`, actions: [{ id: 'dismiss', label: 'Got it', primary: true }], tone: 'success' },
           this.headPoint(),

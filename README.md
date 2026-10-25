@@ -40,7 +40,9 @@ region picker once, 2.5 s after launch.
 - Transparent, frameless, always-on-top window covering the work area, click-through
   everywhere except on the character. Drag the character to move it; the spot is remembered.
 - Menu-bar tray: Look at something, Show/Hide, Do not disturb, Use your own model (GLB),
-  Sign-in check, Quit. Global shortcut `⌘⌥Space`.
+  Sign-in check, Quit. Global shortcut `⌃⌥Space` (⌘⌥Space is macOS's Finder search; change
+  it with `"shortcut"` in settings.json using Electron accelerator names, e.g.
+  `"Control+Alt+C"`; if the chosen one is taken, Clippet falls back to a free one and logs it).
 - First-run onboarding: when the Claude Code backend is selected and the CLI is missing or
   signed out, the character waves and a card explains how to sign in, with an Open Terminal
   button (starts `claude` in Terminal for /login) and Check again. The same card appears if

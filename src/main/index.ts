@@ -7,7 +7,7 @@ import { BubbleWindow } from './bubbleWindow';
 import { LookupFlow } from './lookupFlow';
 import { Onboarding } from './onboarding';
 import { createTray } from './tray';
-import { loadSettings, saveSettings } from './settings';
+import { loadSettings, saveSettings, SHORTCUT_FALLBACKS, setActiveShortcut, shortcutLabel } from './settings';
 
 // Menu-bar app: no Dock icon, no main window in the app switcher.
 if (process.platform === 'darwin') app.dock?.hide();
@@ -59,8 +59,16 @@ app.whenReady().then(() => {
     seq.forEach((fn, i) => setTimeout(fn, 2500 + i * 3000));
   }
 
-  const ok = globalShortcut.register(settings.shortcut, lookAtSomething);
-  if (!ok) console.error('[clippet] could not register shortcut', settings.shortcut);
+  // Register the configured shortcut, falling back to known-free combinations if it is taken.
+  let registered: string | null = null;
+  for (const accel of [settings.shortcut, ...SHORTCUT_FALLBACKS.filter((a) => a !== settings.shortcut)]) {
+    if (globalShortcut.register(accel, lookAtSomething)) { registered = accel; break; }
+    console.warn('[clippet] shortcut taken:', accel);
+  }
+  if (registered) {
+    setActiveShortcut(registered);
+    console.log('[clippet] shortcut registered:', registered);
+  } else console.error('[clippet] no shortcut could be registered; use the menu-bar icon');
 
   const chooseModel = async (): Promise<void> => {
     const r = await dialog.showOpenDialog({ title: 'Choose a GLB model', filters: [{ name: 'glTF binary', extensions: ['glb'] }], properties: ['openFile'] });
@@ -97,7 +105,7 @@ app.whenReady().then(() => {
     isVisible: () => visible,
     isSleeping: () => sleeping,
     hasCustomModel: () => loadSettings().modelUrl !== null,
-    shortcutLabel: settings.shortcut.replace('CommandOrControl', '⌘').replace('Alt', '⌥').replaceAll('+', ''),
+    shortcutLabel: shortcutLabel(),
   });
 });
 
