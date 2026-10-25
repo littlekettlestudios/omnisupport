@@ -1,0 +1,27 @@
+{
+  "name": "clippet",
+  "productName": "Clippet",
+  "version": "0.0.1",
+  "description": "A desktop companion that looks at what you point it to and finds answers",
+  "private": true,
+  "main": "./out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/three": "^0.180.0",
+    "electron": "44.9.3",
+    "electron-vite": "^4.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  }
+}
