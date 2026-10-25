@@ -3,7 +3,7 @@
 Three steps. The first and last are scripts here; the middle one is Mixamo in a browser.
 Blender 4.2+ on `PATH` (tested with 5.2).
 
-## 1. Decimate the LKF output
+## 1. Rebuild the LKF output as a clean low-poly mesh
 
 ```bash
 blender -b --factory-startup -P pipeline/decimate.py -- \
@@ -12,10 +12,19 @@ blender -b --factory-startup -P pipeline/decimate.py -- \
   --glb assets/placeholder.glb --target-tris 15000
 ```
 
-Joins the meshes, collapses ~800k triangles to ~15k keeping UVs and textures, writes the
-textures next to the FBX and embeds them. Takes about 10 s. The `--glb` copy is the
-static placeholder the Clippet renderer uses until the rigged model exists (use
-`--target-tris 6000 --texture-size 1024` for a small one that is fine to commit).
+The LKF GLB is not a surface: it is ~26,000 unwelded triangle patches (820k triangles on
+the sprout farmer). A plain decimation of that looks shattered and skins badly. The
+script therefore thickens every patch into a slab (Solidify), voxel-remeshes the union
+into one closed skin, keeps only the outer shell, collapses it to ~15k evenly sized
+triangles, smooths, unwraps, and bakes the original base colour onto a new 2048 texture.
+About 10 s on an M1 Max. The report JSON next to the FBX lists shell counts and bake
+time. `--voxel` (default 6 mm) trades detail for cleanliness; `--no-remesh` is the old
+straight collapse that keeps the original UVs.
+
+The `--glb` copy is the static placeholder the Clippet renderer uses until the rigged
+model exists (`--target-tris 8000 --bake-size 1024` makes a 2 MB one that is fine to
+commit). Fused parts in the source art (a hand in a pocket, a pot against the chest) stay
+fused; draw them apart in the source.
 
 ## 2. Rig and animate on Mixamo
 
