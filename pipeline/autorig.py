@@ -213,7 +213,37 @@ def protect_torso(mesh_obj: bpy.types.Object, L: dict) -> dict:
                 cur = 0.0
             spine.add([v.index], cur + moved, "REPLACE")
             touched += 1
-    return {"torso_protected_verts": touched}
+    pinned = 0
+    if L["arms_fused"]:
+        # No separable arm geometry: anything the forearm or hand would move is really
+        # torso or pants (a hand in a pocket, a pot against the chest). Hand their weights
+        # to the body so only the upper arm / shoulder region can shrug.
+        lower = [f"mixamorig:{s}{p}" for s in ("Left", "Right") for p in ("ForeArm", "Hand")]
+        hips = groups.get("mixamorig:Hips")
+        for v in mesh_obj.data.vertices:
+            co = mesh_obj.matrix_world @ v.co
+            moved = 0.0
+            for name in lower:
+                g = groups.get(name)
+                if not g:
+                    continue
+                try:
+                    w = g.weight(v.index)
+                except RuntimeError:
+                    continue
+                if w > 0:
+                    g.remove([v.index])
+                    moved += w
+            if moved > 0:
+                target = hips if (co.z < L["hips"].z + 0.04 * H and hips) else spine
+                if target:
+                    try:
+                        cur = target.weight(v.index)
+                    except RuntimeError:
+                        cur = 0.0
+                    target.add([v.index], cur + moved, "REPLACE")
+                    pinned += 1
+    return {"torso_protected_verts": touched, "lower_arm_pinned_verts": pinned}
 
 
 # ---------------------------------------------------------------- clips
@@ -302,7 +332,7 @@ class Poser:
         # whose rest direction is down, so they take fwd_sign relative to pitch_sign.
         fx = self.fwd_sign * self.pitch_sign
         self.rot(f"{side}Arm", x=fwd * k * fx, z=s * out * k * self.out_sign)
-        self.rot(f"{side}ForeArm", x=elbow * k * fx)
+        self.rot(f"{side}ForeArm", x=elbow * k * k * fx)  # forearm barely moves on fused arms
         if k < 1:  # fused arms: show the intent with the shoulder instead
             self.rot(f"{side}Shoulder", z=s * out * 0.12 * self.out_sign, x=fwd * 0.08 * fx)
 
@@ -370,6 +400,7 @@ def clip_walk(p: Poser, t: float, s: float) -> None:
 
 def clip_wave(p: Poser, t: float, s: float) -> None:
     lift = pulse(t, 0, 0.2) * (1 - pulse(t, 0.8, 1))
+    p.hips_up(0.012 * lift * abs(S(t * TAU * 2)))  # a little bounce carries the greeting when the arms cannot
     p.raise_arm("Right", out=95 * lift, elbow=75 * lift)
     p.rot("RightForeArm", z=28 * lift * S(t * TAU * 4))
     p.rot("Head", z=-10 * lift, x=-5 * lift); p.rot("Spine2", z=-6 * lift)
