@@ -30,6 +30,8 @@ coordinates.
 ```ts
 interface CompanionConfig {
   modelUrl: string;        // file:// URL of the GLB to load
+  faceUrls: Partial<Record<'idle' | 'happy' | 'thinking' | 'sorry', string>>;
+                           // face textures for the model's "FaceScreen" mesh (see below)
   canvas: { width: number; height: number; dpr: number };
   home: { x: number; y: number };      // where to stand when idle (feet position)
   scale: number;           // character height in canvas px (default 180)
@@ -110,6 +112,22 @@ change. If this stops firing, the user cannot click or drag the character.
 Bone names follow Mixamo (`mixamorig:Head`, `mixamorig:Neck`, `mixamorig:Spine1`), which
 is what `lookAt` should drive. Scale: the model is 1 m tall at origin, feet at y=0, facing
 +Z; the renderer scales it to `config.scale` pixels.
+
+## Face screen
+
+A model may contain a mesh named `FaceScreen` (a thin patch over the face, skinned to
+the head bone, material with alpha blending). The renderer swaps its texture by mood,
+derived from state and reactions, never commanded directly:
+
+| mood | when |
+|---|---|
+| `happy` | reactions wave, point, happy, excited, nod |
+| `sorry` | reaction sorry |
+| `thinking` | states thinking, searching |
+| `idle` | everything else; dimmed while sleeping |
+
+Textures are loaded from `config.faceUrls`; a mood with no texture keeps the previous
+one. Models without `FaceScreen` ignore all of this.
 
 ## Timing expectations
 

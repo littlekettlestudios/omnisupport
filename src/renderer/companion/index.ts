@@ -52,6 +52,35 @@ let hitVolume: THREE.Mesh;
 let mixer: THREE.AnimationMixer | null = null;
 const actions = new Map<string, THREE.AnimationAction>();
 let headBone: THREE.Object3D | null = null;
+
+// ---- face screen ----------------------------------------------------------
+import type { FaceMood } from '@shared/protocol';
+let faceMaterial: THREE.MeshStandardMaterial | null = null;
+let faceMood: FaceMood | null = null;
+const faceTextures = new Map<FaceMood, THREE.Texture>();
+const textureLoader = new THREE.TextureLoader();
+for (const [mood, url] of Object.entries(config.faceUrls) as [FaceMood, string][]) {
+  textureLoader.load(url, (tex) => {
+    tex.flipY = false; // glTF UV convention
+    tex.colorSpace = THREE.SRGBColorSpace;
+    faceTextures.set(mood, tex);
+    if (mood === faceMood) setFace(mood, true);
+  });
+}
+const STATE_MOOD: Record<CompanionState, FaceMood> = {
+  idle: 'idle', attentive: 'idle', thinking: 'thinking', searching: 'thinking', talking: 'idle', sleeping: 'idle',
+};
+const REACTION_MOOD: Record<string, FaceMood> = { wave: 'happy', point: 'happy', happy: 'happy', excited: 'happy', nod: 'happy', sorry: 'sorry' };
+
+function setFace(mood: FaceMood, force = false): void {
+  if (!faceMaterial || (mood === faceMood && !force)) return;
+  faceMood = mood;
+  const tex = faceTextures.get(mood);
+  if (!tex) return; // keep the previous face until this one is loaded
+  faceMaterial.map = tex;
+  faceMaterial.emissiveMap = tex;
+  faceMaterial.needsUpdate = true;
+}
 let loopAction: THREE.AnimationAction | null = null;
 let loopName = '';
 let reactionAction: THREE.AnimationAction | null = null;
@@ -146,6 +175,19 @@ async function loadModel(url: string): Promise<{ hasRig: boolean; clips: string[
     gltf.scene.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) hasRig = true; });
     // GLTFLoader strips the colon from "mixamorig:Head"; accept either spelling.
     gltf.scene.traverse((o) => { if (!headBone && /^mixamorig:?Head$/.test(o.name)) headBone = o; });
+    faceMaterial = null; faceMood = null;
+    gltf.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && /^FaceScreen/.test(m.name) && (m.material as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+        faceMaterial = m.material as THREE.MeshStandardMaterial;
+        faceMaterial.transparent = true;
+        faceMaterial.depthWrite = false;
+        faceMaterial.emissive = new THREE.Color(0xffffff);
+        faceMaterial.emissiveIntensity = 0.6;
+        m.renderOrder = 2;
+      }
+    });
+    setFace('idle');
     if (gltf.animations.length) {
       mixer = new THREE.AnimationMixer(gltf.scene);
       mixer.addEventListener('finished', onClipFinished);
@@ -331,6 +373,12 @@ function animate(): void {
   headYawNow += (headYaw - headYawNow) * 0.15;
   headPitchNow += (headPitch - headPitchNow) * 0.15;
 
+  if (faceMaterial) {
+    const name = reactionAction?.getClip().name ?? '';
+    setFace(REACTION_MOOD[name] ?? STATE_MOOD[state]);
+    const target = state === 'sleeping' && !reactionAction ? 0.08 : 0.6;
+    faceMaterial.emissiveIntensity += (target - faceMaterial.emissiveIntensity) * 0.1;
+  }
   if (mixer) {
     mixer.update(dt);
     // Additive on top of the clip: the mixer wrote the bone this frame, so rotate after it.

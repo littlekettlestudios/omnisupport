@@ -104,3 +104,20 @@ against the body are detected and get shrugs instead of swings. Separate posed r
 (success, thinking, failed) cannot be animated between, since every image-to-3D run gives
 a different mesh, but they are good references for tuning the key poses in `CLIPS`. Because the bone names are
 Mixamo's, the renderer's head look-at works with either.
+
+## Face expressions
+
+```bash
+blender -b --factory-startup -P pipeline/face_crops.py -- --out assets/face \
+  idle=assets/chibi-ai-poses/idle-a-pose.png happy=assets/chibi-ai-poses/happy-success.png \
+  thinking=assets/chibi-ai-poses/thinking.png sorry=assets/chibi-ai-poses/sad-task-failed.png
+```
+
+Cuts the dark face screen out of each reference render (largest connected dark region in
+the upper part of the picture), masks it with a soft rounded rectangle, and writes
+`assets/face/<mood>.png`. `autorig.py` then adds a `FaceScreen` patch to the rig: a thin
+grid shrink-wrapped onto the modelled screen (found as the dark vertices of the baked
+texture on the front of the head), skinned to the head bone, with the idle face as its
+texture. The renderer swaps that texture by mood: happy for wave/point/happy/excited/nod,
+sorry for sorry, thinking for thinking/searching, idle otherwise, dimmed while sleeping.
+Re-run `face_crops.py` whenever the reference renders change; `--no-face` skips the patch.

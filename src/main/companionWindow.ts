@@ -2,7 +2,7 @@ import { BrowserWindow, screen, ipcMain, systemPreferences, app } from 'electron
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { Command, CompanionConfig, RendererEvent } from '@shared/protocol';
+import type { Command, CompanionConfig, FaceMood, RendererEvent } from '@shared/protocol';
 import { IPC } from '@shared/protocol';
 import { loadSettings, saveSettings } from './settings';
 
@@ -106,11 +106,22 @@ export class CompanionWindow {
     this.feet = home;
     return {
       modelUrl: this.modelUrl(s.modelUrl),
+      faceUrls: this.faceUrls(),
       canvas: { width, height, dpr: screen.getPrimaryDisplay().scaleFactor },
       home,
       scale: s.scale,
       reducedMotion: systemPreferences.getAnimationSettings().prefersReducedMotion,
     };
+  }
+
+  /** Face textures shipped in assets/face, keyed by mood. */
+  faceUrls(): Partial<Record<FaceMood, string>> {
+    const out: Partial<Record<FaceMood, string>> = {};
+    for (const mood of ['idle', 'happy', 'thinking', 'sorry'] as const) {
+      const p = join(app.getAppPath(), 'assets', 'face', `${mood}.png`);
+      if (existsSync(p)) out[mood] = pathToFileURL(p).href;
+    }
+    return out;
   }
 
   /** User-chosen model, else the rigged asset, else the static placeholder. */

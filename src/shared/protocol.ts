@@ -3,11 +3,16 @@
 
 export interface CompanionConfig {
   modelUrl: string;
+  /** file:// URLs of face textures by mood for the FaceScreen mesh; empty when the model has no screen. */
+  faceUrls: Partial<Record<FaceMood, string>>;
   canvas: { width: number; height: number; dpr: number };
   home: { x: number; y: number };
   scale: number;
   reducedMotion: boolean;
 }
+
+/** Expressions the FaceScreen can show; derived by the renderer from state and reactions. */
+export type FaceMood = 'idle' | 'happy' | 'thinking' | 'sorry';
 
 export type CompanionState =
   | 'idle'

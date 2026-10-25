@@ -34,6 +34,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--input", required=True, help="clean GLB or FBX from decimate.py")
     ap.add_argument("--out", required=True)
     ap.add_argument("--poses", help="folder for one render per clip")
+    ap.add_argument("--face", default=None, help="idle face PNG for the FaceScreen patch (default assets/face/idle.png next to the repo)")
+    ap.add_argument("--no-face", action="store_true", help="skip the FaceScreen patch")
     ap.add_argument("--arm-motion", type=float, default=None, help="arm swing scale 0..1; default 1, or 0.35 when the arms are drawn against the body")
     return ap.parse_args(argv)
 
@@ -258,6 +260,90 @@ def protect_torso(mesh_obj: bpy.types.Object, L: dict) -> dict:
                     target.add([v.index], cur + moved, "REPLACE")
                     pinned += 1
     return {"torso_protected_verts": touched, "lower_arm_pinned_verts": pinned}
+
+
+# ---------------------------------------------------------------- face screen
+
+def select_only(objs: list, active) -> None:
+    for o in bpy.context.scene.objects:
+        o.select_set(o in objs)
+    bpy.context.view_layer.objects.active = active
+
+
+def add_face_screen(mesh_obj: bpy.types.Object, arm: bpy.types.Object, L: dict, face_png: Path) -> dict:
+    """A thin grid hugging the front of the head, following the Head bone, carrying the
+    face texture the renderer swaps per mood. Sized from the head; placed on the most
+    forward part of the head, which on this character is the screen."""
+    H = L["H"]
+    me = mesh_obj.data
+    v = np.array([mesh_obj.matrix_world @ Vector(c.co) for c in me.vertices])
+    head_lo, head_hi = L["head"].z, L["head_top"].z
+
+    # Per-vertex base-colour luminance from the baked texture: the screen is the dark area
+    # on the front of the head. That gives the screen's real extent on this model.
+    img = next((n.image for m in me.materials if m and m.use_nodes for n in m.node_tree.nodes if n.type == "TEX_IMAGE" and n.image), None)
+    if img is None or not me.uv_layers.active:
+        return {"face": "skipped: no baked texture"}
+    iw, ih = img.size
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(ih, iw, 4)
+    uv_of = np.zeros((len(me.vertices), 2), dtype=np.float32)
+    uvs = me.uv_layers.active.data
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            uv_of[me.loops[li].vertex_index] = uvs[li].uv
+    sx = np.clip((uv_of[:, 0] * iw).astype(int), 0, iw - 1)
+    sy = np.clip((uv_of[:, 1] * ih).astype(int), 0, ih - 1)
+    lum = px[sy, sx, :3].mean(axis=1)
+    front_half = v[:, 1] < float(np.median(v[(v[:, 2] > head_lo) & (v[:, 2] < head_hi)][:, 1]))
+    dark = (lum < 0.24) & (v[:, 2] > head_lo) & (v[:, 2] < head_hi) & front_half
+    if dark.sum() < 20:
+        return {"face": f"skipped: only {int(dark.sum())} dark head vertices"}
+    d = v[dark]
+    x0, x1 = np.percentile(d[:, 0], 1), np.percentile(d[:, 0], 99)
+    z0, z1 = np.percentile(d[:, 2], 1), np.percentile(d[:, 2], 99)
+    centre_x, centre_z = float((x0 + x1) / 2), float((z0 + z1) / 2)
+    front_y = float(d[:, 1].min())
+    w = float(x1 - x0) * 1.06
+    h = float(z1 - z0) * 1.06
+
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=28, y_subdivisions=20, size=1.0, location=(centre_x, front_y - 0.04, centre_z), rotation=(math.pi / 2, 0, 0))
+    patch = bpy.context.active_object
+    patch.name = "FaceScreen"
+    patch.scale = (w, h, 1)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    sw = patch.modifiers.new("wrap", "SHRINKWRAP")
+    sw.target = mesh_obj
+    sw.wrap_method = "NEAREST_SURFACEPOINT"
+    sw.wrap_mode = "ABOVE_SURFACE"
+    sw.offset = 0.004
+    select_only([patch], patch)
+    bpy.ops.object.modifier_apply(modifier=sw.name)
+    bpy.ops.object.shade_smooth()
+
+    img = bpy.data.images.load(str(face_png))
+    img.pack()
+    mat = bpy.data.materials.new("FaceScreen")
+    mat.use_nodes = True
+    mat.surface_render_method = "BLENDED"
+    mat.use_backface_culling = True
+    nodes = mat.node_tree.nodes
+    bsdf = nodes["Principled BSDF"]
+    tex = nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    links = mat.node_tree.links
+    links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
+    links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+    bsdf.inputs["Emission Strength"].default_value = 0.6
+    bsdf.inputs["Roughness"].default_value = 0.35
+    patch.data.materials.append(mat)
+
+    vg = patch.vertex_groups.new(name="mixamorig:Head")
+    vg.add([vv.index for vv in patch.data.vertices], 1.0, "REPLACE")
+    patch.parent = arm
+    mod = patch.modifiers.new("Armature", "ARMATURE")
+    mod.object = arm
+    return {"face": str(face_png), "face_centre": [round(centre_x, 3), round(front_y, 3), round(centre_z, 3)], "face_size": [round(w, 3), round(h, 3)], "screen_verts": int(dark.sum())}
 
 
 # ---------------------------------------------------------------- clips
@@ -521,9 +607,9 @@ def push_tracks(arm: bpy.types.Object) -> None:
             strip.action_slot = act.slots[0]
 
 
-def export_glb(arm: bpy.types.Object, mesh_obj: bpy.types.Object, out: Path) -> None:
+def export_glb(arm: bpy.types.Object, mesh_obj: bpy.types.Object, out: Path, extra: list[bpy.types.Object] = ()) -> None:
     for o in bpy.context.scene.objects:
-        o.select_set(o in (arm, mesh_obj))
+        o.select_set(o is arm or o is mesh_obj or o in extra)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.export_scene.gltf(
         filepath=str(out), export_format="GLB", use_selection=True, export_yup=True, export_apply=False,
@@ -581,6 +667,16 @@ def main() -> None:
         weights = "envelope"
 
     arm_motion = args.arm_motion if args.arm_motion is not None else (0.35 if L["arms_fused"] else 1.0)
+    face_info: dict = {}
+    extra: list[bpy.types.Object] = []
+    if not args.no_face:
+        face_png = Path(args.face).resolve() if args.face else Path(__file__).resolve().parent.parent / "assets" / "face" / "idle.png"
+        if face_png.exists():
+            face_info = add_face_screen(mesh_obj, arm, L, face_png)
+            extra = [o for o in bpy.context.scene.objects if o.name == "FaceScreen"]
+        else:
+            face_info = {"face": f"skipped: {face_png} not found"}
+
     poser = Poser(arm, arm_motion, L["arm_rest_deg"])
     for name, seconds, fn in CLIPS:
         poser.clip(name, seconds, fn)
@@ -588,11 +684,11 @@ def main() -> None:
 
     poses = render_poses(arm, mesh_obj, Path(args.poses).resolve(), L) if args.poses else []
     push_tracks(arm)
-    export_glb(arm, mesh_obj, out)
+    export_glb(arm, mesh_obj, out, extra)
 
     report = {
         "out": str(out), "bytes": out.stat().st_size, "weights": weights, "weight_fraction": round(weight_fraction, 3),
-        "verts": len(mesh_obj.data.vertices), **protect, "arm_motion": arm_motion, "arms_fused": L["arms_fused"], "arm_separation": L["arm_separation"], "arm_rest_deg": round(L["arm_rest_deg"], 1),
+        "verts": len(mesh_obj.data.vertices), **protect, "arm_motion": arm_motion, "arms_fused": L["arms_fused"], "arm_separation": L["arm_separation"], "arm_rest_deg": round(L["arm_rest_deg"], 1), **face_info,
         "bones": len(arm.data.bones), "clips": {n: s for n, s, _ in CLIPS},
         "landmarks": {k: [round(c, 3) for c in v] for k, v in L.items() if isinstance(v, Vector)},
         "poses": poses,
