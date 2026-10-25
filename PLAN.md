@@ -109,6 +109,11 @@ results, a few cents on Opus 5.5. Cache the system prompt.
 is written to disk after the capture file is read. The bubble has a "show what was sent"
 thumbnail. A settings toggle disables web search for people who want local-only answers.
 
+**Own model.** The tray has "Use your own model (GLB)…": the file is copied into the app's
+data folder and loaded through the protocol's `reload`. Rigged models should follow the
+clip names in `docs/companion-protocol.md`; a static GLB gets the procedural motions. A
+later pass can add FBX import by running `pipeline/assemble.py` behind the picker.
+
 ## 4. Asset pipeline (your part + LKF)
 
 LKF gives a clean, normalised, textured but **unrigged** GLB at ~300k triangles. Rigging is
