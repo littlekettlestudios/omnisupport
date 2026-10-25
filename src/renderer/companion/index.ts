@@ -141,6 +141,7 @@ async function loadModel(url: string): Promise<{ hasRig: boolean; clips: string[
     );
     hitVolume.position.y = size.y / 2;
     body.add(hitVolume);
+    console.warn(`[companion] model bbox min=${box.min.toArray().map((v) => v.toFixed(2))} max=${box.max.toArray().map((v) => v.toFixed(2))} capsule r=${(Math.max(size.x, size.z) * 0.6).toFixed(2)} len=${Math.max(0, size.y - size.x).toFixed(2)}`);
     let hasRig = false;
     gltf.scene.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) hasRig = true; });
     // GLTFLoader strips the colon from "mixamorig:Head"; accept either spelling.
@@ -208,11 +209,22 @@ function hitTest(e: PointerEvent): boolean {
   return hitVolume ? raycaster.intersectObject(hitVolume, false).length > 0 : false;
 }
 
+let pointerDown = false;
+
 function setOver(v: boolean): void {
+  // Never go click-through while the button is down: toggling setIgnoreMouseEvents
+  // makes Chromium synthesize pointerleave, which would otherwise end a drag or eat a
+  // slow click mid-press.
+  if (!v && (pointerDown || drag)) return;
   if (v === over) return;
   over = v;
   bridge.send({ type: 'hover', over });
   canvas.style.cursor = over ? 'grab' : 'default';
+}
+
+function scheduleLeave(): void {
+  if (leaveTimer) return;
+  leaveTimer = window.setTimeout(() => { leaveTimer = null; setOver(false); }, 120);
 }
 
 window.addEventListener('pointermove', (e) => {
@@ -225,22 +237,30 @@ window.addEventListener('pointermove', (e) => {
   }
   const hit = hitTest(e);
   if (hit) { if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; } setOver(true); }
-  else if (over && !leaveTimer) leaveTimer = window.setTimeout(() => { leaveTimer = null; setOver(false); }, 80);
+  else if (over) scheduleLeave();
 });
 window.addEventListener('pointerdown', (e) => {
-  if (!hitTest(e)) return;
+  if (e.button !== 0 || !hitTest(e)) return;
+  pointerDown = true;
+  if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
   const p = toWorld(e.clientX, e.clientY);
   drag = { start: pos.clone(), moved: false, offset: pos.clone().sub(p) };
   canvas.style.cursor = 'grabbing';
 });
-window.addEventListener('pointerup', () => {
+function endPress(e: PointerEvent): void {
+  pointerDown = false;
   if (!drag) return;
   if (drag.moved) { const c = toCanvas(pos.x, pos.y); bridge.send({ type: 'dragEnd', x: c.x, y: c.y }); }
   else bridge.send({ type: 'click' });
   drag = null;
   canvas.style.cursor = over ? 'grab' : 'default';
-});
-window.addEventListener('pointerleave', () => { if (leaveTimer) clearTimeout(leaveTimer); leaveTimer = null; setOver(false); });
+  if (!hitTest(e)) scheduleLeave();
+}
+window.addEventListener('pointerup', endPress);
+window.addEventListener('pointercancel', endPress);
+// A synthetic leave arrives whenever click-through toggles; treat it like a missed move.
+window.addEventListener('pointerleave', () => { if (over) scheduleLeave(); });
+window.addEventListener('blur', () => { if (!pointerDown) scheduleLeave(); });
 
 // ---- animation loop -------------------------------------------------------
 const clock = new THREE.Clock();
