@@ -6,17 +6,20 @@ export interface Settings {
   home: { x: number; y: number } | null;
   scale: number;
   shortcut: string;
+  /** Anthropic API key. ANTHROPIC_API_KEY in the environment takes precedence. Keychain storage is M4. */
+  apiKey: string | null;
+  webSearch: boolean;
 }
 
-const DEFAULTS: Settings = { home: null, scale: 180, shortcut: 'CommandOrControl+Alt+Space' };
+const DEFAULTS: Settings = { home: null, scale: 180, shortcut: 'CommandOrControl+Alt+Space', apiKey: null, webSearch: true };
 
-function file(): string {
+export function settingsFile(): string {
   return join(app.getPath('userData'), 'settings.json');
 }
 
 export function loadSettings(): Settings {
   try {
-    return { ...DEFAULTS, ...JSON.parse(readFileSync(file(), 'utf8')) };
+    return { ...DEFAULTS, ...JSON.parse(readFileSync(settingsFile(), 'utf8')) };
   } catch {
     return { ...DEFAULTS };
   }
@@ -24,5 +27,5 @@ export function loadSettings(): Settings {
 
 export function saveSettings(s: Settings): void {
   mkdirSync(app.getPath('userData'), { recursive: true });
-  writeFileSync(file(), JSON.stringify(s, null, 2));
+  writeFileSync(settingsFile(), JSON.stringify(s, null, 2));
 }

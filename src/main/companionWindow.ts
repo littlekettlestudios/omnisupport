@@ -10,6 +10,8 @@ const here = import.meta.dirname;
 export class CompanionWindow {
   private win: BrowserWindow | null = null;
   private listeners = new Set<(e: RendererEvent) => void>();
+  /** Where the character stands, in canvas pixels (feet). */
+  feet = { x: 0, y: 0 };
 
   create(): BrowserWindow {
     const display = screen.getPrimaryDisplay();
@@ -71,7 +73,14 @@ export class CompanionWindow {
   }
 
   send(cmd: Command): void {
+    if (cmd.type === 'moveTo') this.feet = { x: cmd.x, y: cmd.y };
     this.win?.webContents.send(IPC.command, cmd);
+  }
+
+  /** Convert companion-canvas pixels to a screen point. */
+  toScreen(p: { x: number; y: number }): { x: number; y: number } {
+    const b = this.win?.getBounds() ?? { x: 0, y: 0 };
+    return { x: p.x + b.x, y: p.y + b.y };
   }
 
   onEvent(fn: (e: RendererEvent) => void): () => void {
@@ -93,6 +102,7 @@ export class CompanionWindow {
     const s = loadSettings();
     const [width, height] = win.getContentSize();
     const home = s.home ?? { x: width - 140, y: height - 24 };
+    this.feet = home;
     return {
       modelUrl: pathToFileURL(join(app.getAppPath(), 'assets', 'placeholder.glb')).href,
       canvas: { width, height, dpr: screen.getPrimaryDisplay().scaleFactor },
@@ -110,6 +120,7 @@ export class CompanionWindow {
         win.setIgnoreMouseEvents(!event.over, { forward: true });
         break;
       case 'dragEnd': {
+        this.feet = { x: event.x, y: event.y };
         const s = loadSettings();
         s.home = { x: event.x, y: event.y };
         saveSettings(s);
@@ -124,6 +135,8 @@ export class CompanionWindow {
 
   private fitToWorkArea(win: BrowserWindow): void {
     const { x, y, width, height } = screen.getPrimaryDisplay().workArea;
+    const b = win.getBounds();
+    if (b.x === x && b.y === y && b.width === width && b.height === height) return;
     win.setBounds({ x, y, width, height });
     win.webContents.send(IPC.command, { type: 'reload', modelUrl: this.config(win).modelUrl } satisfies Command);
   }

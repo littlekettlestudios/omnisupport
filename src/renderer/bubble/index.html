@@ -3,7 +3,44 @@
   <head>
     <meta charset="utf-8" />
     <title>Clippet bubble</title>
-    <style>html, body { margin: 0; background: transparent; font: 14px system-ui; }</style>
+    <style>
+      :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --accent: #ff9f0a; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #2c2c2e; --fg: #f5f5f7; --muted: #a1a1a6; --line: #3a3a3c; } }
+      html, body { margin: 0; background: transparent; font: 14px/1.45 -apple-system, system-ui, sans-serif; color: var(--fg); }
+      #card { margin: 10px; background: var(--bg); border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.28), 0 0 0 0.5px rgba(0,0,0,0.12); padding: 12px 14px 12px; width: 332px; box-sizing: border-box; -webkit-app-region: drag; }
+      #card * { -webkit-app-region: no-drag; }
+      header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+      header .title { font-weight: 600; flex: 1; }
+      #close { border: 0; background: var(--line); color: var(--muted); width: 22px; height: 22px; border-radius: 11px; cursor: pointer; font-size: 13px; line-height: 22px; padding: 0; }
+      #thumb { display: block; width: 100%; max-height: 110px; object-fit: contain; object-position: left; border-radius: 8px; background: var(--line); margin-bottom: 8px; }
+      #note { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; color: inherit; background: transparent; outline: none; resize: none; }
+      #note:focus { border-color: var(--accent); }
+      #status { color: var(--muted); font-size: 13px; margin-top: 8px; display: none; }
+      #status::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 4px; background: var(--accent); margin-right: 6px; animation: pulse 1s infinite; }
+      @keyframes pulse { 50% { opacity: 0.3; } }
+      #answer { margin-top: 8px; white-space: pre-wrap; display: none; }
+      #answer ol { margin: 6px 0 0; padding-left: 20px; white-space: normal; }
+      #answer li { margin: 3px 0; }
+      #answer p { margin: 0 0 6px; white-space: normal; }
+      #answer code { font: 12px ui-monospace, monospace; background: var(--line); padding: 1px 4px; border-radius: 4px; }
+      #sources { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; display: none; }
+      #sources a { display: block; color: var(--muted); font-size: 12px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #sources a:hover { color: var(--accent); }
+      #error { color: #d70015; margin-top: 8px; display: none; }
+      .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    </style>
   </head>
-  <body><!-- M1: speech bubble, input, streamed answer card --></body>
+  <body>
+    <div id="card">
+      <header><span class="title">What's up with this?</span><button id="close" title="Close (Esc)">×</button></header>
+      <img id="thumb" alt="What Clippet sees" />
+      <textarea id="note" rows="2" placeholder="Add a note, or press Enter to just look"></textarea>
+      <div class="hint" id="hint">Only this region is sent. Enter to send · Esc to close</div>
+      <div id="status"></div>
+      <div id="answer"></div>
+      <div id="sources"></div>
+      <div id="error"></div>
+    </div>
+    <script type="module" src="./index.ts"></script>
+  </body>
 </html>
