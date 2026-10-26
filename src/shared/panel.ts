@@ -28,6 +28,7 @@ export interface PanelSettings {
   shortcut: string;
   sprites: boolean;
   memory: boolean;
+  dock: boolean;
 }
 
 export type SetupCheck = 'ok' | 'missing' | 'signed-out' | 'denied' | 'unknown' | 'not-needed';

@@ -27,6 +27,8 @@ export interface Settings {
   memory: boolean;
   /** The first-run Setup window has been shown. */
   welcomed: boolean;
+  /** Keep a Dock icon (click it to open the window). Off makes it a menu-bar-only app again. */
+  dock: boolean;
 }
 
 // ⌘⌥Space is macOS's "Show Finder search window"; ⌥Space is taken by Alfred/Raycast users.
@@ -44,7 +46,7 @@ const RETIRED_NAMES = new Set(['Clippet']);
 const DEFAULTS: Settings = {
   name: DEFAULT_NAME, home: null, scale: DEFAULT_SCALE, shortcut: DEFAULT_SHORTCUT, apiKey: null, webSearch: true,
   backend: 'claude-code', claudeModel: 'sonnet', claudePath: null, modelUrl: null, sprites: false,
-  memory: true, welcomed: false,
+  memory: true, welcomed: false, dock: true,
 };
 
 /** On disk the API key is stored as apiKeyEnc (Keychain-encrypted) when encryption is available. */
@@ -73,6 +75,18 @@ export function loadSettings(): Settings {
   if (rest.apiKey && safeStorage.isEncryptionAvailable()) migrate = true; // move a plain-text key into the Keychain
   if (migrate) saveSettings(s);
   return s;
+}
+
+/**
+ * Whether to show the Dock icon at launch. Read straight from disk because it runs before
+ * the app is ready, when the Keychain cannot decrypt the API key yet.
+ */
+export function dockAtLaunch(): boolean {
+  try {
+    return (JSON.parse(readFileSync(settingsFile(), 'utf8')) as Stored).dock !== false;
+  } catch {
+    return DEFAULTS.dock;
+  }
 }
 
 export function saveSettings(s: Settings): void {

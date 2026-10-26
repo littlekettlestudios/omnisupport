@@ -213,6 +213,7 @@ const scale = $<HTMLInputElement>('scale');
 scale.addEventListener('input', () => { $('scale-label').textContent = `${scale.value} px tall`; });
 scale.addEventListener('change', () => void save({ scale: Number(scale.value) }));
 $('sprites').addEventListener('change', (e) => void save({ sprites: (e.target as HTMLInputElement).checked }));
+$('dock').addEventListener('change', (e) => void save({ dock: (e.target as HTMLInputElement).checked }));
 $('model-choose').addEventListener('click', async () => apply(await panel.chooseModel()));
 $('model-reset').addEventListener('click', async () => apply(await panel.resetModel()));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name=backend]')) {
@@ -301,6 +302,7 @@ function apply(s: PanelState): void {
   scale.value = String(st.scale);
   $('scale-label').textContent = `${st.scale} px tall`;
   $<HTMLInputElement>('sprites').checked = st.sprites;
+  $<HTMLInputElement>('dock').checked = st.dock;
   $('model-label').textContent = s.customModel ? 'Using your own GLB.' : 'Using the bundled omni3 robot.';
   $<HTMLButtonElement>('model-reset').disabled = !s.customModel;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name=backend]')) r.checked = r.value === st.backend;

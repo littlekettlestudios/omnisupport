@@ -1,4 +1,4 @@
-import { app, dialog, globalShortcut, systemPreferences } from 'electron';
+import { app, dialog, globalShortcut, Menu, systemPreferences } from 'electron';
 import { copyFileSync, cpSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,11 +10,8 @@ import { LookupFlow } from './lookupFlow';
 import { Onboarding, claudeSignInState, openSignInTerminal } from './onboarding';
 import { listMemories } from './memory';
 import { createTray } from './tray';
-import { activeShortcut, loadSettings, saveSettings, SHORTCUT_FALLBACKS, setActiveShortcut, shortcutLabel } from './settings';
+import { activeShortcut, dockAtLaunch, loadSettings, saveSettings, SHORTCUT_FALLBACKS, setActiveShortcut, shortcutLabel } from './settings';
 import type { PanelSettings, PanelState, SetupCheck } from '@shared/panel';
-
-// Menu-bar app: no Dock icon, no main window in the app switcher (the panel shows one while open).
-if (process.platform === 'darwin') app.dock?.hide();
 
 /** Earlier builds were called Clippet; carry their settings, memory and models over once. */
 function migrateLegacyData(): void {
@@ -28,6 +25,9 @@ function migrateLegacyData(): void {
   }
 }
 migrateLegacyData();
+
+// With the Dock icon off it is a menu-bar-only app; the panel shows the icon while it is open.
+if (process.platform === 'darwin' && !dockAtLaunch()) app.dock?.hide();
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
@@ -75,7 +75,7 @@ async function panelState(recheck = false): Promise<PanelState> {
   return {
     settings: {
       name: s.name, backend: s.backend, claudeModel: s.claudeModel, webSearch: s.webSearch,
-      scale: s.scale, shortcut: s.shortcut, sprites: s.sprites, memory: s.memory,
+      scale: s.scale, shortcut: s.shortcut, sprites: s.sprites, memory: s.memory, dock: s.dock,
     },
     hasApiKey: !!s.apiKey,
     apiKeyFromEnv: envKey,
@@ -102,6 +102,7 @@ function applySettings(patch: Partial<PanelSettings>): void {
   if (typeof patch.webSearch === 'boolean') s.webSearch = patch.webSearch;
   if (typeof patch.memory === 'boolean') s.memory = patch.memory;
   if (typeof patch.sprites === 'boolean') s.sprites = patch.sprites;
+  if (typeof patch.dock === 'boolean') s.dock = patch.dock;
   if (typeof patch.scale === 'number' && Number.isFinite(patch.scale)) s.scale = Math.round(Math.min(Math.max(patch.scale, 60), 400));
   if (typeof patch.shortcut === 'string' && patch.shortcut.trim()) s.shortcut = patch.shortcut.trim();
   saveSettings(s);
@@ -109,7 +110,47 @@ function applySettings(patch: Partial<PanelSettings>): void {
   if (s.scale !== before.scale) companion.send({ type: 'setScale', scale: s.scale });
   if (s.sprites !== before.sprites) companion.reloadRenderer();
   if (s.shortcut !== before.shortcut) registerShortcut(s.shortcut);
+  if (s.dock !== before.dock) applyDock(s.dock);
   rebuildTray();
+}
+
+/** Show or hide the Dock icon. Hiding waits while the panel is open; closing it hides the icon. */
+function applyDock(show: boolean): void {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  if (show) {
+    void app.dock.show();
+    // Run from source the bundle is Electron's, so give the Dock the app's own icon.
+    if (!app.isPackaged) app.dock.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
+    app.dock.setMenu(Menu.buildFromTemplate([
+      { label: 'Look at something…', click: lookAtSomething },
+      { label: 'Chat', click: () => panel.show('chat') },
+      { label: 'Settings…', click: () => panel.show('settings') },
+    ]));
+  } else if (!panel.isOpen) {
+    app.dock.hide();
+  }
+}
+
+/** The macOS menu bar while the app is frontmost: Settings under the app name, plus Edit for copy and paste. */
+function appMenu(): Menu {
+  return Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { label: 'Settings…', accelerator: 'CommandOrControl+,', click: () => panel.show('settings') },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
+  ]);
 }
 
 async function chooseModel(): Promise<void> {
@@ -157,6 +198,8 @@ chat.onStateChanged = () => { void panel.refresh(); rebuildTray(); };
 
 app.whenReady().then(() => {
   const settings = loadSettings();
+  Menu.setApplicationMenu(appMenu());
+  if (settings.dock) applyDock(true);
   companion.create();
 
   companion.onEvent((e) => {
@@ -231,6 +274,9 @@ app.whenReady().then(() => {
   }).rebuild;
 });
 
+// Clicking the Dock icon, or opening the app again from Finder, brings up the window.
+app.on('activate', () => { if (app.isReady()) panel.show('chat'); });
+app.on('second-instance', () => panel.show('chat'));
 app.on('will-quit', () => globalShortcut.unregisterAll());
 // Keep running with no windows; the tray owns the lifecycle.
 app.on('window-all-closed', () => {});

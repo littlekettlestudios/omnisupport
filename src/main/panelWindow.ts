@@ -4,6 +4,7 @@ import type { ChatEvent, PanelSettings, PanelState, PanelTab } from '@shared/pan
 import { PANEL_IPC } from '@shared/panel';
 import type { Chat } from './chat';
 import { addMemory, clearMemories, removeMemory } from './memory';
+import { loadSettings } from './settings';
 
 const here = import.meta.dirname;
 
@@ -23,6 +24,8 @@ export interface PanelHost {
  */
 export class PanelWindow {
   private win: BrowserWindow | null = null;
+
+  get isOpen(): boolean { return !!this.win && !this.win.isDestroyed(); }
 
   constructor(private host: PanelHost, private chat: Chat) {
     const mine = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => !!this.win && e.sender === this.win.webContents;
@@ -87,7 +90,7 @@ export class PanelWindow {
     });
     win.on('closed', () => {
       this.win = null;
-      if (process.platform === 'darwin') app.dock?.hide();
+      if (process.platform === 'darwin' && !loadSettings().dock) app.dock?.hide();
     });
     if (process.platform === 'darwin') void app.dock?.show();
 
