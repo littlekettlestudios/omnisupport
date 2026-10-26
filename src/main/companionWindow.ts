@@ -107,7 +107,7 @@ export class CompanionWindow {
     this.feet = home;
     return {
       modelUrl: this.modelUrl(s.modelUrl),
-      spritesUrl: s.sprites ? this.spritesUrl() : null,
+      spritesUrl: s.sprites ? this.spritesUrl(s.spritePack) : null,
       faceUrls: this.faceUrls(),
       canvas: { width, height, dpr: screen.getPrimaryDisplay().scaleFactor },
       home,
@@ -126,8 +126,9 @@ export class CompanionWindow {
     return out;
   }
 
-  /** The bundled omni3 sprite atlas, or null if it is missing. */
-  spritesUrl(): string | null {
+  /** User-chosen sprite pack, else the bundled omni3 atlas, or null if that is missing. */
+  spritesUrl(custom: string | null): string | null {
+    if (custom) return custom;
     const atlas = join(app.getAppPath(), 'assets', 'sprites', 'omni3', 'atlas.json');
     return existsSync(atlas) ? pathToFileURL(atlas).href : null;
   }

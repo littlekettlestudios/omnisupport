@@ -32,7 +32,7 @@ export function createTray(actions: TrayActions): { tray: Tray; rebuild: () => v
         { type: 'separator' },
         { label: actions.isVisible() ? `Hide ${name}` : `Show ${name}`, click: () => { actions.toggleVisible(); rebuild(); } },
         { label: actions.isSleeping() ? 'Wake up' : 'Do not disturb', click: () => { actions.toggleSleep(); rebuild(); } },
-        { label: 'Pixel sprites (2D)', type: 'checkbox', checked: actions.isSprites(), click: () => { actions.toggleSprites(); rebuild(); } },
+        { label: '2D sprites', type: 'checkbox', checked: actions.isSprites(), click: () => { actions.toggleSprites(); rebuild(); } },
         { type: 'separator' },
         { label: 'Settings…', accelerator: 'CommandOrControl+,', click: () => actions.openSettings() },
         { label: 'Setup…', click: () => actions.openSetup() },

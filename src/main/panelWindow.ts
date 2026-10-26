@@ -15,6 +15,8 @@ export interface PanelHost {
   setApiKey(key: string | null): void;
   chooseModel(): Promise<void>;
   resetModel(): void;
+  chooseSprites(): Promise<void>;
+  resetSprites(): void;
   openTerminal(): void;
 }
 
@@ -44,6 +46,8 @@ export class PanelWindow {
     handle(PANEL_IPC.clearMemories, () => clearMemories());
     handle(PANEL_IPC.chooseModel, () => this.host.chooseModel());
     handle(PANEL_IPC.resetModel, () => this.host.resetModel());
+    handle(PANEL_IPC.chooseSprites, () => this.host.chooseSprites());
+    handle(PANEL_IPC.resetSprites, () => this.host.resetSprites());
     ipcMain.on(PANEL_IPC.send, (e, text: string) => { if (mine(e) && String(text ?? '').trim()) void this.chat.send(String(text)); });
     ipcMain.on(PANEL_IPC.newChat, (e) => { if (mine(e)) this.chat.newConversation(); });
     ipcMain.on(PANEL_IPC.stop, (e) => { if (mine(e)) this.chat.stop(); });
