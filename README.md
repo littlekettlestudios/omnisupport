@@ -1,67 +1,103 @@
-# Clippet
+# Omni Support
 
-A small 3D companion that lives on your macOS desktop. Point it at something on screen
-and it looks it up for you. See [PLAN.md](PLAN.md) for the full plan and
-[docs/companion-protocol.md](docs/companion-protocol.md) for the renderer contract.
+A small 3D helper that lives on your macOS desktop. Point it at anything on screen (an
+error, a setting, a product, a paragraph) and it looks it up for you with Claude, then
+answers in a speech bubble. Reply to keep the conversation going, or click the helper to
+just chat. It remembers what you tell it, so you don't have to repeat yourself, and you can
+give it any name you like (it's called **Omni** until you do).
 
-## Run
+Open source from [Little Kettle Studios](https://github.com/littlekettlestudios).
+
+> **Status: early.** macOS only, run from source. No signed builds yet.
+
+## What it does
+
+- **Look at something.** Press `⌃⌥Space` and drag over part of the screen. The helper walks
+  over, looks at the region, and asks what you need. Only that region is captured.
+- **Chat.** Reply to any answer in the bubble, click the helper to ask something, or open
+  the chat window from the menu-bar icon. The bubble and the window share one conversation.
+- **Memory.** Tell it your name, your setup, the tools you use. It keeps short notes
+  (`Remembered: …` under an answer) and sends them with later questions. See, edit or wipe
+  them in the Memory tab.
+- **Name it.** Type a name in Setup or Settings, or just say "I'll call you Pip".
+- **Settings window.** Name, size, 2D pixel or 3D look, your own GLB model, Claude Code or
+  Anthropic API, model, web search and shortcut, plus a Setup checklist.
+
+## Requirements
+
+| | Needed for | Notes |
+|---|---|---|
+| macOS 13 or newer | everything | Uses `screencapture`, menu-bar and Keychain APIs. Windows/Linux are not supported yet. |
+| Node.js 22+ and npm | building and running | Tested with Node 24. |
+| **One** of the two answer backends: | | |
+| · [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI, signed in | default backend | Runs on your Claude subscription. `npm install -g @anthropic-ai/claude-code`, then run `claude` and `/login`. |
+| · An [Anthropic API key](https://console.anthropic.com/settings/keys) | API backend | Pay per use. Paste it in Settings (stored in the Keychain) or set `ANTHROPIC_API_KEY`. |
+| Screen Recording permission | looking at the screen | macOS asks the first time. Chat works without it. |
+| Blender 4.2+ | only for making your own character | See [pipeline/README.md](pipeline/README.md). Not needed to run the app. |
+
+## Quick start
 
 ```bash
+git clone https://github.com/littlekettlestudios/omnisupport.git
+cd omnisupport
 npm install
-node node_modules/electron/install.js   # once, if node_modules/electron/dist is empty
 npm run build && npx electron .
 ```
 
-`npm run dev` runs with hot reload.
+On first launch the helper waves and the **Setup** window opens: name your helper, then
+follow the checklist (Claude Code sign-in or API key, Screen Recording). After that:
 
-## Backends
+1. Press `⌃⌥Space`, drag over something, add a note or just press Enter.
+2. Reply in the bubble to follow up, or press Esc to close it.
+3. Click the helper any time to chat. The menu-bar icon has Chat, Settings and Setup.
 
-The lookup can run two ways, chosen by `"backend"` in
-`~/Library/Application Support/Clippet/settings.json`:
+The full walkthrough, including permissions and troubleshooting, is in
+[docs/setup.md](docs/setup.md).
 
-- `"claude-code"` (default): spawns your locally installed Claude Code CLI in headless mode
-  (`claude -p`), so it runs on the login the CLI already has, normally a Claude
-  subscription. Sign in once by running `claude` in a terminal. Clippet never reads or
-  stores credentials; it strips `ANTHROPIC_API_KEY` from the child so the subscription is
-  used. Model via `"claudeModel"` (`sonnet` by default, `opus` for deeper answers; both
-  count against the subscription limits at different rates). `"claudePath"` overrides
-  binary discovery. Anthropic's terms allow you to sign in to your own Claude Code with
-  your own subscription; distributing Clippet to other people so it routes through their
-  subscriptions needs Anthropic's approval, so treat this backend as personal use.
-- `"api"`: calls the Anthropic API directly with `claude-opus-5-5`, web search and web fetch
-  server tools and server-side refusal fallbacks. Needs `ANTHROPIC_API_KEY` in the
-  environment or `"apiKey"` in settings.json (Keychain storage is planned for M4). Pay per
-  call.
-`CLIPPET_DEBUG=1` logs hover, click and drag events; `CLIPPET_DEBUG=flow` also opens the
-region picker once, 2.5 s after launch.
+## Caveats
 
-## What works (M1)
+- **Claude Code backend is for personal use.** It runs the `claude` CLI on *your own*
+  login. Anthropic's terms let you use your own subscription this way, but shipping a
+  product that routes other people's requests through their subscriptions needs
+  Anthropic's approval. Use the API backend for anything you distribute.
+- **Running from source asks for Screen Recording for "Electron"**, not "Omni Support",
+  and macOS may ask again after Electron updates. A signed build fixes this (not done yet).
+- **What leaves your Mac:** the region you select, your note, the conversation and your
+  saved memory notes go to Anthropic (through Claude Code or the API) when you ask
+  something, and web search may fetch pages. Nothing is sent in the background. See
+  [docs/privacy.md](docs/privacy.md).
+- **Memory is plain JSON on disk** (`memory.json` in the data folder). Don't tell it
+  secrets; it is told not to save passwords, keys, financial or health details.
+- **Answers can be wrong.** Check anything important against the linked sources.
+- The bundled robot and sprite sheets were generated with image-to-3D tools and rigged by
+  `pipeline/autorig.py`. Its motion is "charming toy", not mocap.
 
-- Transparent, frameless, always-on-top window covering the work area, click-through
-  everywhere except on the character. Drag the character to move it; the spot is remembered.
-- Menu-bar tray: Look at something, Show/Hide, Do not disturb, Pixel sprites (2D) (plays
-  the omni3 pixel sheets in `assets/sprites/omni3` instead of the 3D model), Use your own model (GLB),
-  Sign-in check, Quit. Global shortcut `⌃⌥Space` (⌘⌥Space is macOS's Finder search; change
-  it with `"shortcut"` in settings.json using Electron accelerator names, e.g.
-  `"Control+Alt+C"`; if the chosen one is taken, Clippet falls back to a free one and logs it).
-- First-run onboarding: when the Claude Code backend is selected and the CLI is missing or
-  signed out, the character waves and a card explains how to sign in, with an Open Terminal
-  button (starts `claude` in Terminal for /login) and Check again. The same card appears if
-  a lookup fails for the same reason.
-- The lookup loop: shortcut → drag a rectangle on the dimmed screen → the region is captured
-  with the native `screencapture` (only that region, nothing saved to disk) → the character
-  walks to the region and looks at it → a speech bubble shows the thumbnail and asks for an
-  optional note → Claude (through Claude Code or the API, see Backends; web search on,
-  answers streamed) replies in the bubble with sources. Esc or × closes it.
-- The character is a procedural placeholder until `assets/placeholder.glb` or the rigged
-  `assets/clippet.glb` exists. The renderer in `src/renderer/companion/` is Codex's
-  workstream; see [docs/codex-brief.md](docs/codex-brief.md) and the paste-ready
-  [docs/codex-prompt.md](docs/codex-prompt.md).
+## Docs
 
-## Permissions
+| | |
+|---|---|
+| [docs/setup.md](docs/setup.md) | Install, permissions, backends, settings, troubleshooting |
+| [docs/privacy.md](docs/privacy.md) | What is captured, sent, and stored, and how to delete it |
+| [docs/architecture.md](docs/architecture.md) | How the windows, chat, memory and backends fit together |
+| [docs/companion-protocol.md](docs/companion-protocol.md) | Contract between the app and the character renderer |
+| [docs/motion-research.md](docs/motion-research.md) | Reference behind the walk, run and reaction clips |
+| [pipeline/README.md](pipeline/README.md) | Make and rig your own character in Blender |
 
-Screen capture (M1) needs the Screen Recording permission for the app bundle. In
-development that is granted to "Electron" once; a packaged build needs a signed bundle.
+## Development
+
+```bash
+npm run dev         # hot reload
+npm run typecheck
+npm run build
+```
+
+`CLIPPET_DEBUG=1` logs hover, click and drag events; `CLIPPET_DEBUG=flow` opens the region
+picker 2.5 s after launch; `CLIPPET_DEBUG=pose` cycles the character's states and
+reactions; `CLIPPET_DEBUG=panel` opens the chat window on launch. ("Clippet" was the
+project's working name and survives in some code identifiers.)
+
+To test without touching your own settings, give Electron a scratch data folder:
+`npx electron . --user-data-dir=/tmp/omni-test`.
 
 ## Contributing
 
