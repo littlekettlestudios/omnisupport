@@ -18,6 +18,8 @@ export interface Settings {
   claudePath: string | null;
   /** file:// URL of a user-chosen GLB; null = bundled assets/clippet.glb, else assets/placeholder.glb. */
   modelUrl: string | null;
+  /** Draw the character from the bundled pixel sprite sheets (assets/sprites/omni3) instead of the 3D model. */
+  sprites: boolean;
 }
 
 // ⌘⌥Space is macOS's "Show Finder search window"; ⌥Space is taken by Alfred/Raycast users.
@@ -28,7 +30,7 @@ const RETIRED_DEFAULTS = new Set(['CommandOrControl+Alt+Space']);
 
 const DEFAULTS: Settings = {
   home: null, scale: 180, shortcut: DEFAULT_SHORTCUT, apiKey: null, webSearch: true,
-  backend: 'claude-code', claudeModel: 'sonnet', claudePath: null, modelUrl: null,
+  backend: 'claude-code', claudeModel: 'sonnet', claudePath: null, modelUrl: null, sprites: false,
 };
 
 export function settingsFile(): string {

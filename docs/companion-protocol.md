@@ -30,6 +30,7 @@ coordinates.
 ```ts
 interface CompanionConfig {
   modelUrl: string;        // file:// URL of the GLB to load
+  spritesUrl: string | null; // file:// URL of a sprite atlas.json; when set, draw the pixel sheets in 2D instead
   faceUrls: Partial<Record<'idle' | 'happy' | 'thinking' | 'sorry', string>>;
                            // face textures for the model's "FaceScreen" mesh (see below)
   canvas: { width: number; height: number; dpr: number };
@@ -137,6 +138,27 @@ derived from state and reactions, never commanded directly:
 
 Textures are loaded from `config.faceUrls`; a mood with no texture keeps the previous
 one. Models without `FaceScreen` ignore all of this.
+
+## Sprite mode (2D)
+
+With `config.spritesUrl` set (the tray's **Pixel sprites (2D)**, settings `"sprites": true`),
+`entry.ts` loads `sprites.ts` instead of the 3D renderer. It plays the LKF sheets in
+`assets/sprites/omni3/` (atlas.json from LKF's `configs/sprites/omni3.toml`) under the same
+commands and events:
+
+| protocol | sheet |
+|---|---|
+| idle, attentive, talking | `idle` (sleeping: half speed, dimmed) |
+| thinking, searching | `thinking` with the `think` emote |
+| moveTo with walk | `walk`, or `run` past 220 px; speeds up to 2.4x to arrive within 1.2 s |
+| react wave, point, happy, excited, nod | `success` with the `!` emote |
+| react sorry | `failure` with the rain cloud |
+
+The facing (one of 8) follows the travel direction, then the `lookAt` target; with no
+target it faces the viewer (S). Sprite pixels are drawn at a whole-number zoom, the one
+closest to `config.scale` / the atlas's `pixels_per_metre`. Hover hit-tests the opaque
+pixels of the current frame. `reload` reloads the page, which is also how main switches
+between 2D and 3D. `jump`, `land` and `climb` are in the atlas but no command plays them yet.
 
 ## Timing expectations
 

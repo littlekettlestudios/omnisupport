@@ -11,6 +11,8 @@ export interface TrayActions {
   isVisible(): boolean;
   isSleeping(): boolean;
   hasCustomModel(): boolean;
+  toggleSprites(): void;
+  isSprites(): boolean;
   shortcutLabel: string;
 }
 
@@ -28,6 +30,7 @@ export function createTray(actions: TrayActions): Tray {
         { label: actions.isVisible() ? 'Hide Clippet' : 'Show Clippet', click: () => { actions.toggleVisible(); rebuild(); } },
         { label: actions.isSleeping() ? 'Wake up' : 'Do not disturb', click: () => { actions.toggleSleep(); rebuild(); } },
         { type: 'separator' },
+        { label: 'Pixel sprites (2D)', type: 'checkbox', checked: actions.isSprites(), click: () => { actions.toggleSprites(); rebuild(); } },
         { label: 'Use your own model (GLB)…', click: () => { actions.chooseModel(); rebuild(); } },
         { label: 'Use the default model', enabled: actions.hasCustomModel(), click: () => { actions.resetModel(); rebuild(); } },
         { label: 'Sign-in check…', click: () => actions.setup() },

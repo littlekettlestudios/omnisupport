@@ -3,6 +3,8 @@
 
 export interface CompanionConfig {
   modelUrl: string;
+  /** file:// URL of a sprite atlas.json (LKF pixel sheets); when set the renderer draws those in 2D instead of the model. */
+  spritesUrl: string | null;
   /** file:// URLs of face textures by mood for the FaceScreen mesh; empty when the model has no screen. */
   faceUrls: Partial<Record<FaceMood, string>>;
   canvas: { width: number; height: number; dpr: number };

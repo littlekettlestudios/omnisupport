@@ -79,8 +79,11 @@ app.whenReady().then(() => {
     copyFileSync(r.filePaths[0], dest);
     const s = loadSettings();
     s.modelUrl = pathToFileURL(dest).href;
+    const wasSprites = s.sprites;
+    s.sprites = false; // picking a model means showing it
     saveSettings(s);
-    companion.send({ type: 'reload', modelUrl: s.modelUrl });
+    if (wasSprites) companion.reloadRenderer();
+    else companion.send({ type: 'reload', modelUrl: s.modelUrl });
   };
 
   createTray({
@@ -98,9 +101,19 @@ app.whenReady().then(() => {
     resetModel: () => {
       const s = loadSettings();
       s.modelUrl = null;
+      const wasSprites = s.sprites;
+      s.sprites = false;
       saveSettings(s);
-      companion.send({ type: 'reload', modelUrl: companion.modelUrl(null) });
+      if (wasSprites) companion.reloadRenderer();
+      else companion.send({ type: 'reload', modelUrl: companion.modelUrl(null) });
     },
+    toggleSprites: () => {
+      const s = loadSettings();
+      s.sprites = !s.sprites;
+      saveSettings(s);
+      companion.reloadRenderer();
+    },
+    isSprites: () => loadSettings().sprites,
     setup: () => void onboarding.show('signed-out'),
     isVisible: () => visible,
     isSleeping: () => sleeping,

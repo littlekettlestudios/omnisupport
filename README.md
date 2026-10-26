@@ -39,7 +39,8 @@ region picker once, 2.5 s after launch.
 
 - Transparent, frameless, always-on-top window covering the work area, click-through
   everywhere except on the character. Drag the character to move it; the spot is remembered.
-- Menu-bar tray: Look at something, Show/Hide, Do not disturb, Use your own model (GLB),
+- Menu-bar tray: Look at something, Show/Hide, Do not disturb, Pixel sprites (2D) (plays
+  the omni3 pixel sheets in `assets/sprites/omni3` instead of the 3D model), Use your own model (GLB),
   Sign-in check, Quit. Global shortcut `⌃⌥Space` (⌘⌥Space is macOS's Finder search; change
   it with `"shortcut"` in settings.json using Electron accelerator names, e.g.
   `"Control+Alt+C"`; if the chosen one is taken, Clippet falls back to a free one and logs it).

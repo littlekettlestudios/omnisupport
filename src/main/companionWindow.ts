@@ -107,6 +107,7 @@ export class CompanionWindow {
     this.feet = home;
     return {
       modelUrl: this.modelUrl(s.modelUrl),
+      spritesUrl: s.sprites ? this.spritesUrl() : null,
       faceUrls: this.faceUrls(),
       canvas: { width, height, dpr: screen.getPrimaryDisplay().scaleFactor },
       home,
@@ -123,6 +124,17 @@ export class CompanionWindow {
       if (existsSync(p)) out[mood] = pathToFileURL(p).href;
     }
     return out;
+  }
+
+  /** The bundled sprite atlas (LKF's configs/sprites/omni3.toml output), or null if it is missing. */
+  spritesUrl(): string | null {
+    const atlas = join(app.getAppPath(), 'assets', 'sprites', 'omni3', 'atlas.json');
+    return existsSync(atlas) ? pathToFileURL(atlas).href : null;
+  }
+
+  /** Reload the renderer page; it reads its config again, so this switches between 3D and sprites. */
+  reloadRenderer(): void {
+    this.win?.webContents.reload();
   }
 
   /** User-chosen model, else the rigged asset, else the static placeholder. */
