@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws:" />
+    <title>Omni</title>
+    <style>
+      :root {
+        --bg: #f5f5f7; --panel: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --soft: #f0f0f3;
+        --accent: #ff9f0a; --ok: #1f9d55; --warn: #c27c0e; --bad: #d70015; --you: #ffe7c2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #1c1c1e; --panel: #2c2c2e; --fg: #f5f5f7; --muted: #a1a1a6; --line: #3a3a3c; --soft: #242426; --you: #5a4116; --ok: #30d158; --warn: #ffd60a; --bad: #ff453a; }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.45 -apple-system, system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; }
+      header { -webkit-app-region: drag; display: flex; align-items: center; justify-content: center; gap: 2px; padding: 10px 16px 10px 84px; border-bottom: 1px solid var(--line); }
+      header .who { position: absolute; left: 84px; font-weight: 600; }
+      nav { -webkit-app-region: no-drag; display: flex; background: var(--soft); border-radius: 8px; padding: 2px; }
+      nav button { border: 0; background: transparent; color: var(--fg); font: inherit; padding: 4px 14px; border-radius: 6px; cursor: pointer; }
+      nav button.on { background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,0.15); font-weight: 600; }
+      main { flex: 1; min-height: 0; overflow: auto; }
+      section { display: none; padding: 20px 24px; max-width: 640px; margin: 0 auto; }
+      section.on { display: block; }
+      h2 { font-size: 15px; margin: 0 0 4px; }
+      h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 22px 0 8px; }
+      p.lead { color: var(--muted); margin: 0 0 14px; }
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; }
+      .row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+      .row:last-child { border-bottom: 0; }
+      .row > label, .row > .label { flex: 1; }
+      .row small, .muted { color: var(--muted); }
+      .row small { display: block; }
+      input[type=text], input[type=password], select, textarea {
+        font: inherit; color: inherit; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; outline: none;
+      }
+      input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+      input[type=range] { width: 180px; accent-color: var(--accent); }
+      input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+      button.btn { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; white-space: nowrap; }
+      button.btn.primary { background: var(--accent); border-color: var(--accent); color: #1d1d1f; font-weight: 600; }
+      button.btn.danger { color: var(--bad); }
+      button.btn:disabled { opacity: 0.5; cursor: default; }
+      .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+      .pill.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+      .pill.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+      .pill.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+      .pill.off { background: var(--soft); color: var(--muted); }
+      code { font: 12px ui-monospace, monospace; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+      a { color: var(--accent); text-decoration: none; cursor: pointer; } a:hover { text-decoration: underline; }
+
+      /* chat */
+      #chat.on { display: flex; flex-direction: column; height: 100%; max-width: none; padding: 0; }
+      #log { flex: 1; overflow: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 10px; }
+      .msg { max-width: 78%; padding: 8px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+      .msg.user { align-self: flex-end; background: var(--you); border-color: transparent; white-space: pre-wrap; }
+      .msg.error { color: var(--bad); }
+      .msg img { display: block; max-width: 100%; max-height: 160px; border-radius: 8px; margin-bottom: 6px; }
+      .msg p { margin: 0 0 6px; } .msg p:last-child { margin-bottom: 0; }
+      .msg ol { margin: 4px 0; padding-left: 20px; }
+      .msg .src { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+      .msg .src a { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .msg .memo { margin-top: 6px; color: var(--muted); font-size: 12px; white-space: pre-wrap; }
+      .status { align-self: flex-start; color: var(--muted); font-size: 12px; }
+      .status::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 4px; background: var(--accent); margin-right: 6px; animation: pulse 1s infinite; }
+      @keyframes pulse { 50% { opacity: 0.3; } }
+      .empty { margin: auto; text-align: center; color: var(--muted); max-width: 360px; }
+      #composer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); align-items: flex-end; }
+      #input { flex: 1; resize: none; max-height: 140px; }
+
+      /* memory */
+      .fact { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--line); }
+      .fact:last-child { border-bottom: 0; }
+      .fact span { flex: 1; }
+      .fact button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; }
+      .fact button:hover { color: var(--bad); }
+      .step { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--line); }
+      .step:last-child { border-bottom: 0; }
+      .step .n { width: 22px; height: 22px; border-radius: 11px; background: var(--soft); text-align: center; line-height: 22px; font-weight: 600; flex: none; }
+      .step .body { flex: 1; }
+      .step .acts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+      .welcome { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+      .seg { display: inline-flex; background: var(--soft); border-radius: 8px; padding: 2px; }
+      .seg label { padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+      .seg input { display: none; }
+      .seg input:checked + span { font-weight: 600; }
+      .seg label:has(input:checked) { background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="who" id="who">Omni</span>
+      <nav>
+        <button data-tab="chat">Chat</button>
+        <button data-tab="memory">Memory</button>
+        <button data-tab="settings">Settings</button>
+        <button data-tab="setup">Setup</button>
+      </nav>
+    </header>
+    <main>
+      <section id="chat">
+        <div id="log"></div>
+        <div id="composer">
+          <button class="btn" id="new-chat" title="Start a new conversation">New chat</button>
+          <textarea id="input" rows="1" placeholder="Message…"></textarea>
+          <button class="btn primary" id="send">Send</button>
+        </div>
+      </section>
+
+      <section id="memory">
+        <h2>Memory</h2>
+        <p class="lead">Short notes your helper keeps about you, so you don't have to repeat yourself. They are sent with every question and stored only on this Mac.</p>
+        <div class="card">
+          <div class="row">
+            <label for="memory-on">Remember things about me<small>When off, nothing new is saved and saved notes are not sent.</small></label>
+            <input type="checkbox" id="memory-on" />
+          </div>
+        </div>
+        <h3>Saved notes</h3>
+        <div class="card" id="facts"></div>
+        <div class="row" style="border:0">
+          <input type="text" id="fact-input" placeholder="Add a note, e.g. “I use a 14-inch MacBook Pro with macOS 26”" style="flex:1" />
+          <button class="btn" id="fact-add">Add</button>
+        </div>
+        <div class="row" style="border:0; justify-content: space-between">
+          <a id="open-data">Show the data folder</a>
+          <button class="btn danger" id="fact-clear">Forget everything</button>
+        </div>
+      </section>
+
+      <section id="settings">
+        <h2>Settings</h2>
+        <p class="lead">Changes apply right away.</p>
+        <h3>Helper</h3>
+        <div class="card">
+          <div class="row">
+            <label for="name">Name<small>Or just tell it in chat: “I'll call you Pip”.</small></label>
+            <input type="text" id="name" maxlength="40" />
+          </div>
+          <div class="row">
+            <label for="scale">Size<small id="scale-label"></small></label>
+            <input type="range" id="scale" min="90" max="260" step="10" />
+          </div>
+          <div class="row">
+            <label for="sprites">Pixel sprites (2D)<small>Draw the helper as pixel art instead of the 3D model.</small></label>
+            <input type="checkbox" id="sprites" />
+          </div>
+          <div class="row">
+            <div class="label">3D model<small id="model-label"></small></div>
+            <button class="btn" id="model-choose">Choose GLB…</button>
+            <button class="btn" id="model-reset">Use default</button>
+          </div>
+        </div>
+        <h3>Answers</h3>
+        <div class="card">
+          <div class="row">
+            <div class="label">Answer with<small>Claude Code uses your Claude subscription; the API is pay per use.</small></div>
+            <div class="seg">
+              <label><input type="radio" name="backend" value="claude-code" /><span>Claude Code</span></label>
+              <label><input type="radio" name="backend" value="api" /><span>Anthropic API</span></label>
+            </div>
+          </div>
+          <div class="row" id="row-model">
+            <label for="claude-model">Claude Code model<small>Opus answers more deeply and uses more of your limits.</small></label>
+            <select id="claude-model">
+              <option value="sonnet">Sonnet</option>
+              <option value="opus">Opus</option>
+              <option value="haiku">Haiku</option>
+            </select>
+          </div>
+          <div class="row" id="row-key">
+            <label for="api-key">API key<small id="key-label"></small></label>
+            <input type="password" id="api-key" placeholder="sk-ant-…" autocomplete="off" />
+            <button class="btn" id="key-save">Save</button>
+            <button class="btn" id="key-remove">Remove</button>
+          </div>
+          <div class="row">
+            <label for="web-search">Web search<small>Lets answers check docs and current info. Off keeps answers to what Claude already knows.</small></label>
+            <input type="checkbox" id="web-search" />
+          </div>
+        </div>
+        <h3>Keyboard</h3>
+        <div class="card">
+          <div class="row">
+            <label for="shortcut">Look-at-something shortcut<small id="shortcut-label"></small></label>
+            <input type="text" id="shortcut" placeholder="Control+Alt+Space" />
+            <button class="btn" id="shortcut-save">Apply</button>
+          </div>
+        </div>
+        <p class="muted" style="margin-top:14px">Version <span id="version"></span> · <a id="open-data-2">Data folder</a> · <a data-href="https://github.com/littlekettlestudios/omnisupport">GitHub</a></p>
+      </section>
+
+      <section id="setup">
+        <div class="welcome" id="welcome" hidden>
+          <h2>Welcome!</h2>
+          <p style="margin:4px 0 10px">Three quick checks and your helper is ready. Start by giving it a name.</p>
+          <input type="text" id="welcome-name" maxlength="40" style="width: 220px" />
+          <button class="btn primary" id="welcome-save">Save name</button>
+        </div>
+        <h2>Setup</h2>
+        <p class="lead">What the helper needs to work. <a id="recheck">Check again</a></p>
+        <div class="card" id="steps"></div>
+      </section>
+    </main>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

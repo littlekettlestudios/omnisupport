@@ -26,6 +26,11 @@ export async function claudeSignInState(claudePath?: string): Promise<SignInStat
   });
 }
 
+/** Open the user's Terminal and start the interactive CLI so they can /login. */
+export function openSignInTerminal(): void {
+  execFile('osascript', ['-e', 'tell application "Terminal" to activate', '-e', 'tell application "Terminal" to do script "claude"']);
+}
+
 export const SIGN_IN_ACTIONS: BubbleAction[] = [
   { id: 'open-terminal', label: 'Open Terminal', primary: true },
   { id: 'check-again', label: 'Check again' },
@@ -33,7 +38,7 @@ export const SIGN_IN_ACTIONS: BubbleAction[] = [
 
 /**
  * First-run and sign-in flow for the Claude Code backend: the companion waves and asks
- * the user to sign in to Claude Code in their own terminal. Clippet never handles the
+ * the user to sign in to Claude Code in their own terminal. The app never handles the
  * credentials itself.
  */
 export class Onboarding {
@@ -73,11 +78,7 @@ export class Onboarding {
   handle(id: string): void { void this.action(id); }
 
   private async action(id: string): Promise<void> {
-    if (id === 'open-terminal') {
-      // Opens the user's Terminal and starts the interactive CLI so they can /login.
-      execFile('osascript', ['-e', 'tell application "Terminal" to activate', '-e', 'tell application "Terminal" to do script "claude"']);
-      return;
-    }
+    if (id === 'open-terminal') { openSignInTerminal(); return; }
     if (id === 'check-again') {
       this.companion.send({ type: 'setState', state: 'thinking' });
       const state = await claudeSignInState(loadSettings().claudePath ?? undefined);
@@ -86,7 +87,7 @@ export class Onboarding {
         this.companion.send({ type: 'setState', state: 'idle' });
         const label = shortcutLabel();
         this.bubble.show(
-          { kind: 'card', title: 'All set!', message: `Press ${label} and drag over anything on screen. I will look it up.`, actions: [{ id: 'dismiss', label: 'Got it', primary: true }], tone: 'success' },
+          { kind: 'card', title: 'All set!', message: `Press ${label} and drag over anything on screen, or click me to chat. I will look it up.`, actions: [{ id: 'dismiss', label: 'Got it', primary: true }], tone: 'success' },
           this.headPoint(),
           { onAction: () => this.bubble.hide() },
         );

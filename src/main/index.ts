@@ -1,17 +1,33 @@
-import { app, dialog, globalShortcut } from 'electron';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { app, dialog, globalShortcut, systemPreferences } from 'electron';
+import { copyFileSync, cpSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CompanionWindow } from './companionWindow';
 import { BubbleWindow } from './bubbleWindow';
+import { PanelWindow } from './panelWindow';
 import { Chat } from './chat';
 import { LookupFlow } from './lookupFlow';
-import { Onboarding } from './onboarding';
+import { Onboarding, claudeSignInState, openSignInTerminal } from './onboarding';
+import { listMemories } from './memory';
 import { createTray } from './tray';
-import { loadSettings, saveSettings, SHORTCUT_FALLBACKS, setActiveShortcut, shortcutLabel } from './settings';
+import { activeShortcut, loadSettings, saveSettings, SHORTCUT_FALLBACKS, setActiveShortcut, shortcutLabel } from './settings';
+import type { PanelSettings, PanelState, SetupCheck } from '@shared/panel';
 
-// Menu-bar app: no Dock icon, no main window in the app switcher.
+// Menu-bar app: no Dock icon, no main window in the app switcher (the panel shows one while open).
 if (process.platform === 'darwin') app.dock?.hide();
+
+/** Earlier builds were called Clippet; carry their settings, memory and models over once. */
+function migrateLegacyData(): void {
+  const legacy = join(app.getPath('appData'), 'Clippet');
+  const current = app.getPath('userData');
+  // --user-data-dir is a deliberate scratch profile (testing); leave it empty.
+  if (app.commandLine.hasSwitch('user-data-dir') || legacy === current || !existsSync(legacy) || existsSync(join(current, 'settings.json'))) return;
+  mkdirSync(current, { recursive: true });
+  for (const f of ['settings.json', 'memory.json', 'models']) {
+    if (existsSync(join(legacy, f))) cpSync(join(legacy, f), join(current, f), { recursive: true });
+  }
+}
+migrateLegacyData();
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
@@ -23,10 +39,121 @@ const flow = new LookupFlow(companion, bubble, chat);
 const onboarding = new Onboarding(companion, bubble);
 let visible = true;
 let sleeping = false;
+let claudeCheck: SetupCheck = 'unknown';
+let rebuildTray = (): void => {};
+
+const lookAtSomething = (): void => { if (!sleeping) void flow.start(); };
+
+/** Register the shortcut, falling back to known-free combinations if it is taken. Returns the one registered. */
+function registerShortcut(preferred: string): string | null {
+  globalShortcut.unregisterAll();
+  for (const accel of [preferred, ...SHORTCUT_FALLBACKS.filter((a) => a !== preferred)]) {
+    try {
+      if (globalShortcut.register(accel, lookAtSomething)) {
+        setActiveShortcut(accel);
+        console.log('[clippet] shortcut registered:', accel);
+        return accel;
+      }
+    } catch {
+      // Not a valid accelerator string.
+    }
+    console.warn('[clippet] shortcut taken or invalid:', accel);
+  }
+  console.error('[clippet] no shortcut could be registered; use the menu-bar icon');
+  return null;
+}
+
+function screenCheck(): SetupCheck {
+  const s = systemPreferences.getMediaAccessStatus('screen');
+  return s === 'granted' ? 'ok' : s === 'denied' || s === 'restricted' ? 'denied' : 'unknown';
+}
+
+async function panelState(recheck = false): Promise<PanelState> {
+  const s = loadSettings();
+  if (recheck || claudeCheck === 'unknown') claudeCheck = await claudeSignInState(s.claudePath ?? undefined);
+  const envKey = !!process.env['ANTHROPIC_API_KEY'];
+  return {
+    settings: {
+      name: s.name, backend: s.backend, claudeModel: s.claudeModel, webSearch: s.webSearch,
+      scale: s.scale, shortcut: s.shortcut, sprites: s.sprites, memory: s.memory,
+    },
+    hasApiKey: !!s.apiKey,
+    apiKeyFromEnv: envKey,
+    customModel: s.modelUrl !== null,
+    memories: listMemories(),
+    conversation: chat.current,
+    shortcutLabel: shortcutLabel(activeShortcut()),
+    setup: {
+      claudeCode: claudeCheck,
+      screen: screenCheck(),
+      apiKey: s.backend !== 'api' ? 'not-needed' : envKey || s.apiKey ? 'ok' : 'missing',
+    },
+    dataFolder: app.getPath('userData'),
+    version: app.getVersion(),
+  };
+}
+
+function applySettings(patch: Partial<PanelSettings>): void {
+  const before = loadSettings();
+  const s = { ...before };
+  if (typeof patch.name === 'string' && patch.name.trim()) s.name = patch.name.trim().slice(0, 40);
+  if (patch.backend === 'claude-code' || patch.backend === 'api') s.backend = patch.backend;
+  if (typeof patch.claudeModel === 'string' && patch.claudeModel) s.claudeModel = patch.claudeModel;
+  if (typeof patch.webSearch === 'boolean') s.webSearch = patch.webSearch;
+  if (typeof patch.memory === 'boolean') s.memory = patch.memory;
+  if (typeof patch.sprites === 'boolean') s.sprites = patch.sprites;
+  if (typeof patch.scale === 'number' && Number.isFinite(patch.scale)) s.scale = Math.round(Math.min(Math.max(patch.scale, 60), 400));
+  if (typeof patch.shortcut === 'string' && patch.shortcut.trim()) s.shortcut = patch.shortcut.trim();
+  saveSettings(s);
+
+  if (s.scale !== before.scale) companion.send({ type: 'setScale', scale: s.scale });
+  if (s.sprites !== before.sprites) companion.reloadRenderer();
+  if (s.shortcut !== before.shortcut) registerShortcut(s.shortcut);
+  rebuildTray();
+}
+
+async function chooseModel(): Promise<void> {
+  const r = await dialog.showOpenDialog({ title: 'Choose a GLB model', filters: [{ name: 'glTF binary', extensions: ['glb'] }], properties: ['openFile'] });
+  if (r.canceled || !r.filePaths[0]) return;
+  const dir = join(app.getPath('userData'), 'models');
+  mkdirSync(dir, { recursive: true });
+  const dest = join(dir, `custom-${Date.now()}.glb`);
+  copyFileSync(r.filePaths[0], dest);
+  const s = loadSettings();
+  s.modelUrl = pathToFileURL(dest).href;
+  const wasSprites = s.sprites;
+  s.sprites = false; // picking a model means showing it
+  saveSettings(s);
+  if (wasSprites) companion.reloadRenderer();
+  else companion.send({ type: 'reload', modelUrl: s.modelUrl });
+  rebuildTray();
+}
+
+function resetModel(): void {
+  const s = loadSettings();
+  s.modelUrl = null;
+  const wasSprites = s.sprites;
+  s.sprites = false;
+  saveSettings(s);
+  if (wasSprites) companion.reloadRenderer();
+  else companion.send({ type: 'reload', modelUrl: companion.modelUrl(null) });
+  rebuildTray();
+}
+
+const panel = new PanelWindow({
+  state: panelState,
+  saveSettings: applySettings,
+  setApiKey: (key) => saveSettings({ ...loadSettings(), apiKey: key }),
+  chooseModel,
+  resetModel,
+  openTerminal: openSignInTerminal,
+}, chat);
 
 chat.on((e) => {
+  panel.chatEvent(e);
   if (e.type !== 'turn' && e.type !== 'new' && bubble.visible && bubble.conversationId === e.conversationId) bubble.agent(e);
 });
+chat.onStateChanged = () => { void panel.refresh(); rebuildTray(); };
 
 app.whenReady().then(() => {
   const settings = loadSettings();
@@ -35,7 +162,15 @@ app.whenReady().then(() => {
   companion.onEvent((e) => {
     if (e.type === 'ready') {
       console.log('[clippet] renderer ready, rig:', e.hasRig, 'clips:', e.clips);
-      setTimeout(() => void onboarding.checkAtLaunch(), 800);
+      setTimeout(() => {
+        const s = loadSettings();
+        if (!s.welcomed) {
+          // First run: the Setup tab covers sign-in, permissions and naming in one place.
+          saveSettings({ ...s, welcomed: true });
+          companion.send({ type: 'react', clip: 'wave' });
+          panel.show('setup', true);
+        } else void onboarding.checkAtLaunch();
+      }, 800);
     }
     if (e.type === 'click') {
       if (process.env['CLIPPET_DEBUG']) console.log('[clippet] click on character');
@@ -47,9 +182,10 @@ app.whenReady().then(() => {
     if (e.type === 'dragEnd' && process.env['CLIPPET_DEBUG']) console.log('[clippet] dragged to', e.x, e.y);
   });
 
-  const lookAtSomething = (): void => { if (!sleeping) void flow.start(); };
   flow.onAction = (id) => {
     if (id === 'dismiss') bubble.hide();
+    else if (id === 'open-chat') { bubble.hide(); panel.show('chat'); }
+    else if (id === 'open-setup') { bubble.hide(); panel.show(loadSettings().backend === 'api' ? 'settings' : 'setup'); }
     else onboarding.handle(id);
   };
 
@@ -67,36 +203,16 @@ app.whenReady().then(() => {
     ];
     seq.forEach((fn, i) => setTimeout(fn, 2500 + i * 3000));
   }
+  // CLIPPET_DEBUG=panel: open the panel on launch.
+  if (process.env['CLIPPET_DEBUG'] === 'panel') setTimeout(() => panel.show('chat'), 1500);
 
-  // Register the configured shortcut, falling back to known-free combinations if it is taken.
-  let registered: string | null = null;
-  for (const accel of [settings.shortcut, ...SHORTCUT_FALLBACKS.filter((a) => a !== settings.shortcut)]) {
-    if (globalShortcut.register(accel, lookAtSomething)) { registered = accel; break; }
-    console.warn('[clippet] shortcut taken:', accel);
-  }
-  if (registered) {
-    setActiveShortcut(registered);
-    console.log('[clippet] shortcut registered:', registered);
-  } else console.error('[clippet] no shortcut could be registered; use the menu-bar icon');
+  registerShortcut(settings.shortcut);
 
-  const chooseModel = async (): Promise<void> => {
-    const r = await dialog.showOpenDialog({ title: 'Choose a GLB model', filters: [{ name: 'glTF binary', extensions: ['glb'] }], properties: ['openFile'] });
-    if (r.canceled || !r.filePaths[0]) return;
-    const dir = join(app.getPath('userData'), 'models');
-    mkdirSync(dir, { recursive: true });
-    const dest = join(dir, `custom-${Date.now()}.glb`);
-    copyFileSync(r.filePaths[0], dest);
-    const s = loadSettings();
-    s.modelUrl = pathToFileURL(dest).href;
-    const wasSprites = s.sprites;
-    s.sprites = false; // picking a model means showing it
-    saveSettings(s);
-    if (wasSprites) companion.reloadRenderer();
-    else companion.send({ type: 'reload', modelUrl: s.modelUrl });
-  };
-
-  createTray({
+  rebuildTray = createTray({
     lookAtSomething,
+    openChat: () => panel.show('chat'),
+    openSettings: () => panel.show('settings'),
+    openSetup: () => panel.show('setup'),
     toggleVisible: () => {
       visible = !visible;
       companion.send({ type: 'setVisible', visible });
@@ -106,29 +222,13 @@ app.whenReady().then(() => {
       sleeping = !sleeping;
       companion.send({ type: 'setState', state: sleeping ? 'sleeping' : 'idle' });
     },
-    chooseModel: () => void chooseModel(),
-    resetModel: () => {
-      const s = loadSettings();
-      s.modelUrl = null;
-      const wasSprites = s.sprites;
-      s.sprites = false;
-      saveSettings(s);
-      if (wasSprites) companion.reloadRenderer();
-      else companion.send({ type: 'reload', modelUrl: companion.modelUrl(null) });
-    },
-    toggleSprites: () => {
-      const s = loadSettings();
-      s.sprites = !s.sprites;
-      saveSettings(s);
-      companion.reloadRenderer();
-    },
+    toggleSprites: () => applySettings({ sprites: !loadSettings().sprites }),
     isSprites: () => loadSettings().sprites,
-    setup: () => void onboarding.show('signed-out'),
     isVisible: () => visible,
     isSleeping: () => sleeping,
-    hasCustomModel: () => loadSettings().modelUrl !== null,
-    shortcutLabel: shortcutLabel(),
-  });
+    name: () => loadSettings().name,
+    shortcutLabel: () => shortcutLabel(activeShortcut()),
+  }).rebuild;
 });
 
 app.on('will-quit', () => globalShortcut.unregisterAll());
