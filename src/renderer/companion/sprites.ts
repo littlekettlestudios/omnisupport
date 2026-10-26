@@ -1,19 +1,23 @@
-// 2D companion renderer: plays the LKF pixel sprite sheets (assets/sprites/<name>/atlas.json)
-// instead of the 3D model. Same protocol as index.ts (hover → click-through, drag, moveTo,
-// states, reactions); the character turns to one of eight facings from the way it travels
-// or looks, and each frame is held for its own time from the atlas.
+// 2D companion renderer: plays a sprite pack (atlas.json plus sheets: the bundled
+// assets/sprites/omni3 pixel art, or one made with scripts/make_sprite_pack.py) instead of
+// the 3D model. Same protocol as index.ts (hover → click-through, drag, moveTo, states,
+// reactions); the character turns to the facing nearest the way it travels or looks, and
+// each frame is held for its own time from the atlas.
 import type { Command, CompanionConfig, CompanionState, ReactionClip } from '@shared/protocol';
 
 type Pt = [number, number];
 interface Clip {
   sheet: string; frames: number; frame_w: number; frame_h: number; loop: boolean;
   durations_ms: number[]; emote: string | null; origin: Pt;
-  rows: Record<string, number>; anchors: Record<string, Pt[]>; root: Record<string, Pt[]>;
+  /** Row per facing; a pack may have only some facings (say S, W and E). */
+  rows: Record<string, number>; anchors?: Record<string, Pt[]>; root?: Record<string, Pt[]>;
   ground_speed_px_s?: number;
 }
 interface Atlas {
   pixels_per_metre: number; facings: string[]; clips: Record<string, Clip>;
-  emotes: { sheet: string; frame_size: number; anchor_gap: number; emotes: Record<string, { row: number; frames: number; fps: number }> };
+  /** false for painted art: scale smoothly instead of by whole pixels. Default true. */
+  pixel_art?: boolean;
+  emotes?: { sheet: string; frame_size: number; anchor_gap: number; emotes: Record<string, { row: number; frames: number; fps: number }> };
 }
 interface Sheet { image: ImageBitmap; alpha: Uint8Array; width: number }
 
@@ -50,7 +54,8 @@ export async function start(config: CompanionConfig): Promise<void> {
   const at = (file: string): string => new URL(file, config.spritesUrl!).href;
   const sheets: Record<string, Sheet> = {};
   await Promise.all(Object.entries(atlas.clips).map(async ([name, c]) => { sheets[name] = await loadSheet(at(c.sheet)); }));
-  const emoteSheet = await loadSheet(at(atlas.emotes.sheet));
+  const emoteSheet = atlas.emotes ? await loadSheet(at(atlas.emotes.sheet)) : null;
+  const pixelArt = atlas.pixel_art !== false;
 
   const bridge = window.clippet;
   const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -60,10 +65,12 @@ export async function start(config: CompanionConfig): Promise<void> {
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   const ctx = canvas.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = !pixelArt;
+  ctx.imageSmoothingQuality = 'high';
 
-  // Whole sprite pixels per metre-scaled pixel, so the art stays crisp.
-  const zoomFor = (scale: number): number => Math.max(1, Math.round(scale / atlas.pixels_per_metre));
+  // Pixel art scales by whole sprite pixels so it stays crisp; painted art scales freely.
+  const zoomFor = (scale: number): number =>
+    pixelArt ? Math.max(1, Math.round(scale / atlas.pixels_per_metre)) : scale / atlas.pixels_per_metre;
   let zoom = zoomFor(config.scale);
   const rm = config.reducedMotion;
   const has = (name: string): boolean => name in atlas.clips;
@@ -73,6 +80,7 @@ export async function start(config: CompanionConfig): Promise<void> {
   let state: CompanionState = 'idle';
   let visible = true;
   let facing = 'S';
+  let side = 'E';      // last sideways facing, for clips that only have W and E
   const pos = { x: config.home.x, y: config.home.y };   // feet, canvas px
   let move: { fx: number; fy: number; tx: number; ty: number; t: number; dur: number } | null = null;
   let look: { x: number; y: number } | null = null;
@@ -91,8 +99,14 @@ export async function start(config: CompanionConfig): Promise<void> {
 
   const facingTo = (dx: number, dy: number): string => {
     const k = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
-    return SECTORS[((k % 8) + 8) % 8];
+    const f = SECTORS[((k % 8) + 8) % 8];
+    if (f.includes('W')) side = 'W';
+    else if (f.includes('E')) side = 'E';
+    return f;
   };
+  /** The clip's row for the current facing, else its nearest stand-in: SW → W, then front, then the last side. */
+  const rowFor = (c: Clip): number =>
+    c.rows[facing] ?? c.rows[facing.replace(/[NS]/, '')] ?? c.rows['S'] ?? c.rows[side] ?? Object.values(c.rows)[0] ?? 0;
   function faceLook(): void {
     if (!look) { facing = 'S'; return; }
     const dx = look.x - pos.x, dy = look.y - (pos.y - config.scale * 0.6);   // from about chest height
@@ -166,8 +180,8 @@ export async function start(config: CompanionConfig): Promise<void> {
 
   function draw(): void {
     const c = atlas.clips[play.clip];
-    const row = c.rows[facing] ?? 0;
-    const em = c.emote ? atlas.emotes.emotes[c.emote] : null;
+    const row = rowFor(c);
+    const em = c.emote && atlas.emotes ? atlas.emotes.emotes[c.emote] : null;
     const ef = em ? Math.floor((emoteClock / 1000) * em.fps) % em.frames : 0;
     const x0 = Math.round(pos.x - c.origin[0] * zoom), y0 = Math.round(pos.y - c.origin[1] * zoom);
     const key = `${visible}|${play.clip}|${play.i}|${row}|${x0},${y0}|${zoom}|${ef}|${state === 'sleeping'}`;
@@ -177,16 +191,18 @@ export async function start(config: CompanionConfig): Promise<void> {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
     if (!visible) return;
-    const r = c.root[facing]?.[play.i] ?? c.origin;
+    const r = c.root?.[facing]?.[play.i] ?? c.origin;
+    const m = atlas.pixels_per_metre * zoom;   // screen px per metre
     ctx.fillStyle = 'rgba(20, 16, 30, 0.22)';
     ctx.beginPath();
-    ctx.ellipse(x0 + r[0] * zoom, y0 + r[1] * zoom, 13 * zoom, 3.5 * zoom, 0, 0, Math.PI * 2);
+    ctx.ellipse(x0 + r[0] * zoom, y0 + r[1] * zoom, 0.146 * m, 0.039 * m, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = state === 'sleeping' ? 0.75 : 1;
     ctx.drawImage(sheets[play.clip].image, play.i * c.frame_w, row * c.frame_h, c.frame_w, c.frame_h,
       x0, y0, c.frame_w * zoom, c.frame_h * zoom);
-    if (em && !move) {
-      const S = atlas.emotes.frame_size, a = c.anchors[facing][play.i];
+    const a = c.anchors?.[facing]?.[play.i];
+    if (em && emoteSheet && atlas.emotes && a && !move) {
+      const S = atlas.emotes.frame_size;
       ctx.drawImage(emoteSheet.image, ef * S, em.row * S, S, S,
         Math.round(x0 + (a[0] - S / 2) * zoom), Math.round(y0 + (a[1] - atlas.emotes.anchor_gap - S) * zoom), S * zoom, S * zoom);
     }

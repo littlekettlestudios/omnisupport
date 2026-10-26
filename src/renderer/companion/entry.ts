@@ -1,4 +1,4 @@
-// Picks the companion renderer: the pixel sprite sheets in 2D when the config names an
+// Picks the companion renderer: a 2D sprite pack when the config names an
 // atlas, else the 3D model (index.ts). Main reloads the page to switch between them.
 const config = await window.clippet.getConfig();
 
