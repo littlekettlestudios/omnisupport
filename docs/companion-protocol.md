@@ -116,6 +116,7 @@ anything while hidden (`setVisible false`) as a miss.
 | `walk` | moveTo travel |
 | `run` | not used by the renderer yet (LKF pixel sprite sheets) |
 | `wave`, `point`, `happy`, `sorry`, `excited`, `nod` | reactions |
+| `jump`, `land`, `climb`, `success`, `failure` | not used by the renderer yet (LKF pixel sprite sheets). `jump` and `climb` carry root motion on the Hips (up 0.28 m; up 0.40 m and forward 0.30 m) |
 
 Bone names follow Mixamo (`mixamorig:Head`, `mixamorig:Neck`, `mixamorig:Spine1`), which
 is what `lookAt` should drive. Scale: the model is 1 m tall at origin, feet at y=0, facing

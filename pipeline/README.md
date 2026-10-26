@@ -97,6 +97,29 @@ procedurally, and exports the rigged GLB. `--poses` renders one frame per clip f
 quick look. About 10 s. The motion is simple and cheerful rather than mocap; swap in
 Mixamo clips through `assemble.py` whenever you want better.
 
+The clips follow [docs/motion-research.md](../docs/motion-research.md): the walk is a
+toddler gait (60/40 stance/swing, lowest just after heel strike, waddle, counter-rotating
+chest, arms a frame behind the legs), the run is spring-mass with two flight phases, and the
+one-shots (`jump`, `land`, `climb`, `success`, `failure`) are keyed pose to pose with
+anticipation, an unease'd action, overshoot and settle, and the head and hands trailing the
+body. Feet and hands go through IK while keying, so planted feet never slide and hands can
+hold a ledge; the result is baked to plain rotations, so the GLB needs no IK. `walk` and
+`run` move at `WALK_SPEED` / `RUN_SPEED` (0.31 and 0.52 m/s) without foot sliding.
+
+Flags for characters the landmarks misread:
+
+- `--arms free|fused`: short arms whose mitten hands hang at hip height look fused to the
+  auto-detection; `free` gives them full motion. `--arm-rest DEG` overrides how far the
+  modelled arms are lowered (0 keeps them as modelled).
+- `--leg-joints KNEE ANKLE`: joint heights as fractions of the height. Put the ankle at the
+  boot top so a boot moves as one piece.
+- `--rigid`: limbs and head take only their strongest bone, so armour and glass turn as
+  solid pieces instead of bending at the joints; the torso still blends.
+
+The omni3 robot (glass droplet head, big boots) is rigged with
+`--no-face --arms free --arm-rest 0 --rigid --leg-joints 0.16 0.10` into `assets/omni3.glb`;
+its sprite sheets come from LKF's `configs/sprites/omni3.toml`.
+
 Generate the source character in an **A-pose** (arms held away from the body). The rig
 measures how far the arms lean out and lowers them to the sides as the base pose of every
 clip, so the character stands with arms down and raises them only to express. Arms drawn

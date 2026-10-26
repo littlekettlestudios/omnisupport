@@ -23,7 +23,7 @@ from pathlib import Path
 
 import bpy
 import numpy as np
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 FPS = 30
 
@@ -37,12 +37,17 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--face", default=None, help="idle face PNG for the FaceScreen patch (default assets/face/idle.png next to the repo)")
     ap.add_argument("--no-face", action="store_true", help="skip the FaceScreen patch")
     ap.add_argument("--arm-motion", type=float, default=None, help="arm swing scale 0..1; default 1, or 0.35 when the arms are drawn against the body")
+    ap.add_argument("--arms", choices=("auto", "free", "fused"), default="auto", help="override the fused-arms detection (short arms whose hands hang at hip height read as fused)")
+    ap.add_argument("--arm-rest", type=float, default=None, help="degrees to lower the modelled arms to the sides (default: measured from the A-pose)")
+    ap.add_argument("--leg-joints", type=float, nargs=2, metavar=("KNEE", "ANKLE"), default=None,
+                    help="knee and ankle heights as fractions of the height (default: halfway down the leg, 0.07); put the ankle at the boot top so a boot moves as one piece")
+    ap.add_argument("--rigid", action="store_true", help="hard-skin limbs and head to their dominant bone: armour and glass move as rigid pieces instead of bending")
     return ap.parse_args(argv)
 
 
 # ---------------------------------------------------------------- landmarks
 
-def landmarks(mesh_obj: bpy.types.Object) -> dict:
+def landmarks(mesh_obj: bpy.types.Object, leg_joints: tuple[float, float] | None = None) -> dict:
     """Joint positions in Blender world space (Z up, character faces -Y) from the silhouette."""
     v = np.array([mesh_obj.matrix_world @ Vector(c.co) for c in mesh_obj.data.vertices])
     z0 = v[:, 2].min()
@@ -91,6 +96,8 @@ def landmarks(mesh_obj: bpy.types.Object) -> dict:
     hips_z = crotch_z + 0.07 * H
     ankle_z = 0.07 * H
     knee_z = (crotch_z + ankle_z) / 2
+    if leg_joints:
+        knee_z, ankle_z = leg_joints[0] * H, leg_joints[1] * H
     leg_band = v[(v[:, 2] > ankle_z) & (v[:, 2] < crotch_z)]
     leg_x = float(np.abs(leg_band[:, 0]).mean()) if len(leg_band) else 0.08 * H
     leg_x = max(leg_x, 0.04 * H)
@@ -125,6 +132,12 @@ def landmarks(mesh_obj: bpy.types.Object) -> dict:
         L[f"{side}Foot"] = P(s * leg_x, ankle_z)
         L[f"{side}ToeBase"] = Vector((s * leg_x, foot_y - 0.07 * H, 0.015 * H + z0))
         L[f"{side}ToeEnd"] = Vector((s * leg_x, foot_y - 0.11 * H, 0.01 * H + z0))
+    for side in ("Left", "Right"):
+        # A slight bend at rest picks the side IK bends to: knees forward (-Y), elbows back.
+        hip, ankle = L[f"{side}UpLeg"], L[f"{side}Foot"]
+        L[f"{side}Leg"].y = min(L[f"{side}Leg"].y, (hip.y + ankle.y) / 2 - 0.015 * H)
+        sh, wr = L[f"{side}Arm"], L[f"{side}Hand"]
+        L[f"{side}ForeArm"].y = max(L[f"{side}ForeArm"].y, (sh.y + wr.y) / 2 + 0.015 * H)
     d = L["LeftHand"] - L["LeftArm"]
     L["arm_rest_deg"] = 0.0 if arms_fused else max(0.0, math.degrees(math.atan2(abs(d.x), max(1e-6, -d.z))) - 8.0)
     return L
@@ -260,6 +273,30 @@ def protect_torso(mesh_obj: bpy.types.Object, L: dict) -> dict:
                     target.add([v.index], cur + moved, "REPLACE")
                     pinned += 1
     return {"torso_protected_verts": touched, "lower_arm_pinned_verts": pinned}
+
+
+def rigidify(mesh_obj: bpy.types.Object) -> int:
+    """Give every vertex whose strongest bone is a limb or the head that bone alone. Heat
+    weights blend across joints, which suits skin but crushes a boot or a glass head when
+    the joint bends; a robot's parts should turn as solid pieces. Torso bones keep their
+    blend so the body still bends smoothly."""
+    soft = {f"mixamorig:{n}" for n in ("Hips", "Spine", "Spine1", "Spine2", "Neck")}
+    names = {g.index: g.name for g in mesh_obj.vertex_groups}
+    groups = {g.name: g for g in mesh_obj.vertex_groups}
+    changed = 0
+    for v in mesh_obj.data.vertices:
+        ws = [(g.weight, names[g.group]) for g in v.groups if g.weight > 0]
+        if not ws:
+            continue
+        w, top = max(ws)
+        if top in soft:
+            continue
+        for _, n in ws:
+            if n != top:
+                groups[n].remove([v.index])
+        groups[top].add([v.index], 1.0, "REPLACE")
+        changed += 1
+    return changed
 
 
 # ---------------------------------------------------------------- face screen
@@ -409,6 +446,19 @@ class Poser:
         for pb in arm.pose.bones:
             pb.rotation_mode = "XYZ"
         self.pitch_sign, self.out_sign, self.fwd_sign = self.calibrate()
+        self.yaw_sign, self.roll_sign = self.calibrate_turn()
+        self.shrug_axes = {side: self.calibrate_shrug(side) for side in ("Left", "Right")}
+        self.root_inv = self.calibrate_root()
+        foot = arm.data.bones["mixamorig:LeftFoot"].head_local
+        toe = arm.data.bones["mixamorig:LeftToeBase"].tail_local
+        self.toe_len = max(0.03, abs(toe.y - foot.y))   # ankle to toe tip, horizontally
+        self.heel_len = 0.45 * self.toe_len              # ankle to heel
+        self.ik = self.setup_ik()
+        self.targets: dict = {}
+        self.root_offset = Vector()
+        self.foot_pitch: dict = {}
+        self.foot_follow: dict = {}
+        self.prev_euler: dict = {}
 
     def _tail_delta(self, bone: str, axis: int, rad: float) -> Vector:
         """World displacement of a bone's tail when rotated about one local axis."""
@@ -432,7 +482,196 @@ class Poser:
         print(f"AUTORIG_AXES pitch_sign={pitch} out_sign={out} fwd_sign={fwd}")
         return pitch, out, fwd
 
+    def calibrate_turn(self) -> tuple[float, float]:
+        """Signs for yaw (about the bone, + turns the face to the character's left, +X) and
+        roll (+ tilts the top toward its left) on the upright bones."""
+        pb = self.arm.pose.bones["mixamorig:Head"]
+        bpy.context.view_layer.update()
+        front = pb.matrix.inverted() @ (pb.head + Vector((0, -0.1, 0)))
+        pb.rotation_euler = (0, 0.5, 0)
+        bpy.context.view_layer.update()
+        yaw = 1.0 if (pb.matrix @ front).x > pb.head.x else -1.0
+        pb.rotation_euler = (0, 0, 0)
+        bpy.context.view_layer.update()
+        roll = 1.0 if self._tail_delta("mixamorig:Head", 2, 0.5).x > 0 else -1.0
+        return yaw, roll
+
+    def calibrate_shrug(self, side: str) -> tuple:
+        """(axis, sign) pairs on the clavicle that lift its tail and swing it forward."""
+        bone = f"mixamorig:{side}Shoulder"
+        d = {ax: self._tail_delta(bone, ax, 0.3) for ax in (0, 1, 2)}
+        up_ax = max(d, key=lambda ax: abs(d[ax].z))
+        fwd_ax = max((ax for ax in d if ax != up_ax), key=lambda ax: abs(d[ax].y))
+        return (up_ax, 1.0 if d[up_ax].z > 0 else -1.0), (fwd_ax, 1.0 if d[fwd_ax].y < 0 else -1.0)
+
+    def shrug(self, side: str, up: float = 0, fwd: float = 0) -> None:
+        """Clavicle: + up raises the shoulder, - drops it; + fwd rounds it forward. Degrees."""
+        pb = self.arm.pose.bones[f"mixamorig:{side}Shoulder"]
+        r = list(pb.rotation_euler)
+        for (ax, sign), deg_ in zip(self.shrug_axes[side], (up, fwd)):
+            r[ax] += math.radians(deg_) * sign
+        pb.rotation_euler = r
+
+    def calibrate_root(self) -> Matrix:
+        """World displacement of the Hips per unit of bone-local location, inverted, so
+        root() can move the body in world terms (forward, up, sideways)."""
+        pb = self.arm.pose.bones["mixamorig:Hips"]
+        cols = []
+        for axis in range(3):
+            before = (self.arm.matrix_world @ pb.head).copy()
+            loc = [0.0, 0.0, 0.0]; loc[axis] = 1.0
+            pb.location = loc
+            bpy.context.view_layer.update()
+            cols.append((self.arm.matrix_world @ pb.head) - before)
+            pb.location = (0, 0, 0)
+            bpy.context.view_layer.update()
+        m = Matrix((cols[0], cols[1], cols[2])).transposed()
+        return m.inverted()
+
+    def setup_ik(self) -> dict:
+        """Muted two-bone IK chains for the legs and arms. Clips that plant a foot or place a
+        hand turn a chain on for the frame, solve() reads the result and writes it back as
+        plain rotations, so the exported clip stays FK and the renderer needs no IK."""
+        chains = {}
+        for side, sx in (("Left", 1), ("Right", -1)):
+            for limb, upper, lower, pole_dir in (("leg", "UpLeg", "Leg", Vector((0, -1, 0))),
+                                                ("arm", "Arm", "ForeArm", Vector((0.6 * sx, 1, 0)))):
+                lo = self.arm.pose.bones[f"mixamorig:{side}{lower}"]
+                end = self.arm.data.bones[f"mixamorig:{side}{lower}"].tail_local
+                mid = self.arm.data.bones[f"mixamorig:{side}{lower}"].head_local
+                tgt = bpy.data.objects.new(f"ik_{limb}_{side}", None)
+                pole = bpy.data.objects.new(f"pole_{limb}_{side}", None)
+                for o in (tgt, pole):
+                    bpy.context.scene.collection.objects.link(o)
+                tgt.location = self.arm.matrix_world @ end
+                pole.location = self.arm.matrix_world @ (mid + pole_dir.normalized() * 0.5)
+                con = lo.constraints.new("IK")
+                con.target = tgt
+                con.pole_target = pole
+                con.chain_count = 2
+                con.use_tail = True
+                con.mute = True
+                top = self.arm.data.bones[f"mixamorig:{side}{upper}"].head_local
+                chains[(limb, side)] = {"con": con, "target": tgt, "pole": pole, "pole_dir": pole_dir,
+                                         "length": (mid - top).length + (end - mid).length,
+                                         "rest_end": (self.arm.matrix_world @ end).copy(),
+                                         "bones": [f"mixamorig:{side}{upper}", f"mixamorig:{side}{lower}"]}
+        for ch in chains.values():
+            ch["con"].pole_angle = self._best_pole_angle(ch)
+        return chains
+
+    def _best_pole_angle(self, ch: dict) -> float:
+        """Bone rolls decide which pole angle bends the knee toward its pole; try the four
+        quarter turns with the end pulled in a little and keep the one that bends the right way."""
+        mid_bone = self.arm.pose.bones[ch["bones"][1]]
+        ch["con"].mute = False
+        ch["target"].location = ch["rest_end"] + Vector((0, 0, 0.04))
+        best, best_score = 0.0, -1e9
+        for ang in (0.0, math.pi / 2, math.pi, -math.pi / 2):
+            ch["con"].pole_angle = ang
+            bpy.context.view_layer.update()
+            knee = self.arm.matrix_world @ mid_bone.head
+            rest_knee = self.arm.matrix_world @ self.arm.data.bones[ch["bones"][1]].head_local
+            score = (knee - rest_knee).dot(ch["pole_dir"].normalized())
+            if score > best_score:
+                best, best_score = ang, score
+        ch["con"].mute = True
+        ch["target"].location = ch["rest_end"]
+        bpy.context.view_layer.update()
+        return best
+
+    # IK pose helpers: positions are world offsets in metres from the rest pose, in the
+    # character's own terms (fwd = the way it faces, up, out = away from the body midline).
+    def _world(self, side: str, fwd: float, up: float, out: float) -> Vector:
+        return Vector(((out if side == "Left" else -out), -fwd, up))
+
+    def foot(self, side: str, fwd: float = 0, up: float = 0, out: float = 0, toe_up: float = 0, follow: float = 0) -> None:
+        """Plant the ankle at an offset from where it stands at rest. follow=0 pins it to the
+        ground (it stays put while the body moves), 1 carries it along with root() (feet in
+        the air). toe_up pitches the foot in world terms: 0 keeps the sole level whatever the
+        leg does, + lifts the toes (heel strike, pivots on the heel), - points them (heel
+        off, pivots on the toes)."""
+        ch = self.ik[("leg", side)]
+        lift = self.heel_len * math.sin(math.radians(toe_up)) if toe_up > 0 else self.toe_len * math.sin(math.radians(-toe_up))
+        self.targets[("leg", side)] = ch["rest_end"] + self._world(side, fwd, up + lift * (1 - follow), out) + self.root_offset * follow
+        self.foot_pitch[side] = toe_up
+        self.foot_follow[side] = follow
+
+    def fit_root(self, slack: float = 0.985) -> None:
+        """Lower the body just enough that every foot target is in reach, so a stride never
+        leaves a foot hanging above the ground. Only ever lowers; feet that follow the body
+        come down with it."""
+        bpy.context.view_layer.update()
+        drop = 0.0
+        for side in ("Left", "Right"):
+            tgt = self.targets.get(("leg", side))
+            if tgt is None:
+                continue
+            ch = self.ik[("leg", side)]
+            d = tgt - self.arm.matrix_world @ self.arm.pose.bones[ch["bones"][0]].head
+            r = ch["length"] * slack
+            horiz = d.x * d.x + d.y * d.y
+            if horiz < r * r:
+                drop = min(drop, d.z + math.sqrt(r * r - horiz))  # d.z < 0: the foot is below the hip
+        if drop < 0:
+            self.root_offset = self.root_offset + Vector((0, 0, drop))
+            self.arm.pose.bones["mixamorig:Hips"].location = self.root_inv @ self.root_offset
+            for side, follow in self.foot_follow.items():
+                self.targets[("leg", side)] += Vector((0, 0, drop * follow))
+
+    def turn(self, bone: str, pitch: float = 0, yaw: float = 0, roll: float = 0) -> None:
+        """pitch + bends forward, yaw + turns toward the character's left, roll + tilts its top
+        toward its left; degrees, on an upright bone (Hips, Spine*, Neck, Head)."""
+        self.rot(bone, x=pitch, y=yaw * self.yaw_sign, z=roll * self.roll_sign)
+
+    def hand(self, side: str, fwd: float = 0, up: float = 0, out: float = 0, follow: float = 1.0) -> None:
+        """Place the wrist at an offset from its rest position. follow=1 carries it along with
+        root() (a gesture), 0 pins it in the world (a hand on a ledge). Call after fit_root()."""
+        ch = self.ik[("arm", side)]
+        self.targets[("arm", side)] = ch["rest_end"] + self._world(side, fwd, up, out) + self.root_offset * follow
+
+    def root(self, fwd: float = 0, up: float = 0, side: float = 0) -> None:
+        """Move the whole body (Hips) by a world offset: root motion for jumps and climbs."""
+        self.root_offset = Vector((side, -fwd, up))
+        pb = self.arm.pose.bones["mixamorig:Hips"]
+        pb.location = self.root_inv @ self.root_offset
+
+    def solve(self) -> None:
+        if not self.targets:
+            return
+        for key, pos in self.targets.items():
+            ch = self.ik[key]
+            ch["target"].location = pos
+            ch["con"].mute = False
+        bpy.context.view_layer.update()
+        solved = {b: self.arm.pose.bones[b].matrix.copy() for key in self.targets for b in self.ik[key]["bones"]}
+        for ch in self.ik.values():
+            ch["con"].mute = True
+        bpy.context.view_layer.update()
+        for key in self.targets:
+            for b in self.ik[key]["bones"]:
+                pb = self.arm.pose.bones[b]
+                pb.matrix = solved[b]
+                bpy.context.view_layer.update()
+        for side, pitch in self.foot_pitch.items():
+            pb = self.arm.pose.bones[f"mixamorig:{side}Foot"]
+            rest = self.arm.data.bones[pb.name].matrix_local
+            rot = Matrix.Rotation(math.radians(-pitch), 3, "X") @ rest.to_3x3()
+            pb.matrix = Matrix.Translation(pb.matrix.translation) @ rot.to_4x4()
+            bpy.context.view_layer.update()
+        for key in self.targets:
+            names = self.ik[key]["bones"] + ([f"mixamorig:{key[1]}Foot"] if key[0] == "leg" else [])
+            for b in names:
+                pb = self.arm.pose.bones[b]
+                pb.location = (0, 0, 0)
+                pb.rotation_euler = pb.matrix_basis.to_euler("XYZ", self.prev_euler.get(b, pb.rotation_euler))
+                self.prev_euler[b] = pb.rotation_euler.copy()
+
     def reset(self) -> None:
+        self.targets = {}
+        self.foot_pitch = {}
+        self.foot_follow = {}
+        self.root_offset = Vector()
         for pb in self.arm.pose.bones:
             pb.rotation_euler = (0, 0, 0)
             pb.location = (0, 0, 0)
@@ -447,6 +686,7 @@ class Poser:
                 pb.keyframe_insert("location", frame=frame)
 
     def clip(self, name: str, seconds: float, fn, step: int = 2) -> bpy.types.Action:
+        self.prev_euler = {}
         act = bpy.data.actions.new(name)
         act.use_fake_user = True
         self.arm.animation_data_create()
@@ -458,9 +698,10 @@ class Poser:
         for f in range(0, frames + 1, step):
             self.reset()
             fn(self, f / frames, f / FPS)
+            self.solve()
             self.key(f)
         if frames % step:
-            self.reset(); fn(self, 1.0, seconds); self.key(frames)
+            self.reset(); fn(self, 1.0, seconds); self.solve(); self.key(frames)
         self.arm.animation_data.action = None
         return act
 
@@ -512,15 +753,6 @@ def clip_attentive(p: Poser, t: float, s: float) -> None:
     p.raise_arm("Left", out=8); p.raise_arm("Right", out=8)
 
 
-def clip_thinking(p: Poser, t: float, s: float) -> None:
-    # Reference: one hand to the chin, head tilted toward it, other arm hanging.
-    p.breathe(t, 0.5)
-    p.rot("Head", x=-6, z=-14 + 3 * S(t * TAU))
-    p.raise_arm("Right", fwd=50, out=8, elbow=128)
-    p.rot("RightForeArm", z=12 * p.out_sign)
-    p.rot("Spine1", z=-4)
-
-
 def clip_searching(p: Poser, t: float, s: float) -> None:
     p.breathe(t, 0.5)
     p.rot("Head", z=45 * S(t * TAU), x=-10 + 5 * C(t * TAU * 2))
@@ -542,24 +774,292 @@ def clip_sleeping(p: Poser, t: float, s: float) -> None:
     p.raise_arm("Left", out=-4); p.raise_arm("Right", out=-4)
 
 
+# ---------------------------------------------------------------- pose-to-pose clips
+#
+# The clips below follow docs/motion-research.md: gait phases from biomechanics (stance
+# vs swing, where the body is lowest and highest), timing and spacing from classic
+# animation (anticipation, a fast unease'd action, overshoot and settle), and overlap so
+# the big head and the hands trail the body. Feet and hands go through IK so planted feet
+# never slide and hands can hold a ledge. Distances are metres on the 1 m character.
+
+EASES = {
+    "io": lambda u: 0.5 - 0.5 * math.cos(math.pi * u),  # slow out of the last key, slow into this one
+    "in": lambda u: u * u,                               # accelerate into the key: falls, contacts
+    "out": lambda u: 1 - (1 - u) * (1 - u),              # decelerate into the key: rises, settles
+    "lin": lambda u: u,
+    "step": lambda u: 0.0,                               # hold the last key, cut on this one
+}
+
+
+def keyed(keys: list, t: float) -> dict:
+    """Pose-to-pose interpolation. keys = [(time 0..1, {channel: value}, ease)]; a key names
+    only the channels that change, the rest carry over from the key before (0 before the
+    first). ease shapes the segment arriving at that key (see EASES)."""
+    full, cur = [], {}
+    names = {k for _, pose, _ in keys for k in pose}
+    for time, pose, ease in keys:
+        cur = {**{n: 0.0 for n in names}, **cur, **pose}
+        full.append((time, cur, ease))
+    t = min(max(t, full[0][0]), full[-1][0])
+    for (t0, a, _), (t1, b, ease) in zip(full, full[1:]):
+        if t <= t1:
+            u = EASES[ease]((t - t0) / (t1 - t0)) if t1 > t0 else 1.0
+            return {n: a[n] + (b[n] - a[n]) * u for n in names}
+    return dict(full[-1][1])
+
+
+def lagged(fn, t: float, lags: dict, loop: bool) -> dict:
+    """fn(t) -> pose, with channels starting with a lags prefix sampled that much later
+    (the head and hands trail the body). Negative lags lead."""
+    pose = fn(t)
+    for prefix, lag in lags.items():
+        tt = (t - lag) % 1.0 if loop else min(max(t - lag, 0.0), 1.0)
+        late = fn(tt)
+        pose.update({k: v for k, v in late.items() if k.startswith(prefix)})
+    return pose
+
+
+def apply_pose(p: Poser, c: dict) -> None:
+    """Channels: root_fwd/up/side (m); hips_, spine_, chest_, head_ pitch/yaw/roll (deg; spine
+    is split over Spine and Spine1, head over Neck and Head); l/r + sh_up, sh_fwd (clavicle);
+    l/r + a_fwd, a_out, a_elbow (FK arm) or, with hands_ik, l/r + h_fwd, h_up, h_out and
+    hands_follow; l/r + f_fwd, f_up, f_out, f_toe (feet, IK) with feet_follow or a per-foot
+    lf_follow / rf_follow."""
+    g = lambda k, d=0.0: c.get(k, d)
+    p.root(fwd=g("root_fwd"), up=g("root_up"), side=g("root_side"))
+    p.turn("Hips", g("hips_pitch"), g("hips_yaw"), g("hips_roll"))
+    for bone in ("Spine", "Spine1"):
+        p.turn(bone, g("spine_pitch") / 2, g("spine_yaw") / 2, g("spine_roll") / 2)
+    p.turn("Spine2", g("chest_pitch"), g("chest_yaw"), g("chest_roll"))
+    p.turn("Neck", g("head_pitch") / 4, g("head_yaw") / 4, g("head_roll") / 4)
+    p.turn("Head", g("head_pitch") * 3 / 4, g("head_yaw") * 3 / 4, g("head_roll") * 3 / 4)
+    for side, k in (("Left", "l"), ("Right", "r")):
+        p.shrug(side, g(k + "sh_up"), g(k + "sh_fwd"))
+        if not g("hands_ik"):
+            p.raise_arm(side, fwd=g(k + "a_fwd"), out=g(k + "a_out"), elbow=g(k + "a_elbow"))
+        p.foot(side, g(k + "f_fwd"), g(k + "f_up"), g(k + "f_out"), g(k + "f_toe"),
+               follow=g(k + "f_follow", g("feet_follow")))
+    p.fit_root()
+    if g("hands_ik"):
+        for side, k in (("Left", "l"), ("Right", "r")):
+            p.hand(side, g(k + "h_fwd"), g(k + "h_up"), g(k + "h_out"), follow=g("hands_follow"))
+
+
+def posed(keys: list, lags: dict | None = None, loop: bool = False):
+    """A clip function from keys: fn(p, t, s) for Poser.clip."""
+    def fn(p: Poser, t: float, s: float) -> None:
+        apply_pose(p, lagged(lambda tt: keyed(keys, tt), t, lags or {}, loop))
+    return fn
+
+
+# Locomotion -------------------------------------------------------------------
+# Toddler gait is the model for this body (legs a third of the height): short steps, a
+# wide base and a waddle. Half-step lengths are what the IK can reach without lifting the
+# body; ground speed = 4 * half-step / cycle, so a game can move the sprite without the
+# feet sliding (WALK_SPEED, RUN_SPEED below).
+
+WALK_SECONDS, WALK_HALF = 0.72, 0.055
+RUN_SECONDS, RUN_HALF = 0.5, 0.065
+WALK_SPEED = 4 * WALK_HALF / WALK_SECONDS
+RUN_SPEED = 4 * RUN_HALF / RUN_SECONDS
+
+
+def walk_foot(u: float) -> tuple[float, float, float]:
+    """(fwd, up, toe_up) of one foot, u = 0..1 from its own heel strike. Stance 60%: heel
+    strike with the toes up, foot slap flat by 7%, heel off from 43%, toe-off at 60%.
+    Swing 40%: the foot clears the ground most around passing and reaches forward."""
+    u %= 1.0
+    if u < 0.6:
+        v = u / 0.6
+        toe = 10 * (1 - v / 0.12) if v < 0.12 else (-18 * (v - 0.72) / 0.28 if v > 0.72 else 0.0)
+        return WALK_HALF - 2 * WALK_HALF * v, 0.0, toe
+    v = (u - 0.6) / 0.4
+    return -WALK_HALF + 2 * WALK_HALF * ease(v), 0.035 * S(math.pi * v) ** 0.8, -18 + 28 * ease(v)
+
+
 def clip_walk(p: Poser, t: float, s: float) -> None:
-    a = S(t * TAU)
-    p.rot("LeftUpLeg", x=-28 * a); p.rot("RightUpLeg", x=28 * a)
-    p.rot("LeftLeg", x=max(0, 40 * S(t * TAU + 0.6))); p.rot("RightLeg", x=max(0, 40 * S(t * TAU + math.pi + 0.6)))
-    p.raise_arm("Left", fwd=-22 * a, elbow=15); p.raise_arm("Right", fwd=22 * a, elbow=15)
-    p.rot("Spine", z=4 * a); p.rot("Head", z=-4 * a, x=-3)
-    p.hips_up(0.012 * abs(S(t * TAU * 2)) - 0.006)
+    a = TAU * t
+    q = (2 * t) % 1.0
+    lf, rf = walk_foot(t), walk_foot(t + 0.5)
+    rise = abs(S(math.pi * (q - 0.2)))  # 0 at Down (sharp), 1 between Passing and Up (round)
+    late = TAU * (t - 0.06)              # arms trail the legs a frame
+    pose = {
+        "root_up": -0.012 + 0.024 * rise, "root_side": 0.025 * S(a),
+        "hips_yaw": -7 * C(a), "hips_roll": -4 * S(a),
+        "spine_pitch": 4 + 1.5 * (1 - rise), "spine_yaw": 7 * C(a), "spine_roll": 6 * S(a),
+        "chest_yaw": 4 * C(a),
+        "head_pitch": -5 + 3 * abs(S(math.pi * ((2 * (t - 0.06)) % 1.0 - 0.2))),
+        "head_yaw": -4 * C(a), "head_roll": -2 * S(a),
+        "lf_fwd": lf[0], "lf_up": lf[1], "lf_toe": lf[2],
+        "rf_fwd": rf[0], "rf_up": rf[1], "rf_toe": rf[2],
+    }
+    for k, sgn in (("l", -1), ("r", 1)):
+        swing = sgn * C(late)  # each arm swings against its own leg
+        pose.update({k + "a_fwd": 27 * swing, k + "a_elbow": 18 + 15 * max(0.0, swing),
+                     k + "a_out": 5 - 7 * max(0.0, swing)})
+    apply_pose(p, pose)
+
+
+def keyline(keys: list, u: float) -> float:
+    """1-D keyed curve over u in 0..1: keys = [(u, value, ease)]."""
+    return keyed([(k, {"v": v}, e) for k, v, e in keys], u)["v"]
+
+
+def run_foot(u: float, body_up: float) -> tuple[float, float, float]:
+    """(fwd, up, toe_up) of one foot, u from its own contact. Stance only 27% (two flight
+    phases per stride); in swing the heel kicks up behind, the knee drives forward."""
+    u %= 1.0
+    if u < 0.27:
+        v = u / 0.27
+        toe = 5 * (1 - v / 0.2) if v < 0.2 else (-25 * (v - 0.6) / 0.4 if v > 0.6 else 0.0)
+        return RUN_HALF - 2 * RUN_HALF * v, 0.0, toe
+    v = (u - 0.27) / 0.73
+    fwd = keyline([(0, -RUN_HALF, "lin"), (0.25, -RUN_HALF - 0.035, "out"), (0.8, RUN_HALF + 0.025, "io"), (1, RUN_HALF, "in")], v)
+    up = keyline([(0, 0, "lin"), (0.3, 0.075, "out"), (0.65, 0.05, "io"), (1, 0, "in")], v)
+    toe = keyline([(0, -25, "lin"), (0.3, -35, "out"), (0.7, 5, "io"), (1, 5, "lin")], v)
+    return fwd, up + max(0.0, body_up), toe
 
 
 def clip_run(p: Poser, t: float, s: float) -> None:
-    # Walk pushed further: longer stride, high knee lift on the recovery leg, arms pumping
-    # with bent elbows, body leaning into it, and a bigger bounce for the flight phase.
-    a = S(t * TAU)
-    p.rot("LeftUpLeg", x=-44 * a); p.rot("RightUpLeg", x=44 * a)
-    p.rot("LeftLeg", x=12 + max(0, 75 * S(t * TAU + 0.7))); p.rot("RightLeg", x=12 + max(0, 75 * S(t * TAU + math.pi + 0.7)))
-    p.raise_arm("Left", fwd=-38 * a, out=6, elbow=85); p.raise_arm("Right", fwd=38 * a, out=6, elbow=85)
-    p.rot("Spine", x=9, z=6 * a); p.rot("Head", x=-7, z=-5 * a)
-    p.hips_up(0.03 * abs(S(t * TAU * 2)) - 0.018)
+    a = TAU * t
+    q = (2 * t) % 1.0
+    # spring-mass bounce: lowest at mid-stance (rounded), ballistic arc through the flight
+    up = -0.04 * S(math.pi * q / 0.54) if q < 0.54 else 0.035 * (1 - ((q - 0.77) / 0.23) ** 2)
+    lf, rf = run_foot(t, up), run_foot(t + 0.5, up)
+    lead = TAU * (t + 0.04)  # in a run the arms drive slightly ahead of the legs
+    pose = {
+        "root_up": up, "root_side": 0.008 * S(a),
+        "hips_yaw": -4 * C(a), "hips_roll": -2 * S(a),
+        "spine_pitch": 9, "spine_yaw": 10 * C(a), "chest_yaw": 3 * C(a),
+        "head_pitch": -8 + 4 * (up / 0.04), "head_yaw": -9 * C(a),
+        "lf_fwd": lf[0], "lf_up": lf[1], "lf_toe": lf[2],
+        "rf_fwd": rf[0], "rf_up": rf[1], "rf_toe": rf[2],
+    }
+    for k, sgn in (("l", -1), ("r", 1)):
+        swing = sgn * C(lead)
+        pose.update({k + "a_fwd": 36 * swing + 8, k + "a_elbow": 85 + 8 * swing, k + "a_out": 7})
+    apply_pose(p, pose)
+
+
+# Thinking: weight on one leg, the thinking hand at the chin, gaze up and aside, a re-tilt
+# halfway through and an irregular tap. Loops.
+def clip_thinking(p: Poser, t: float, s: float) -> None:
+    look = keyed([(0.0, {"head_yaw": 15, "head_pitch": -10, "head_roll": 10}, "io"),
+                  (0.38, {}, "io"),
+                  (0.52, {"head_yaw": 5, "head_pitch": -13, "head_roll": -6}, "io"),
+                  (0.86, {}, "io"),
+                  (1.0, {"head_yaw": 15, "head_pitch": -10, "head_roll": 10}, "io")], t)
+    # taps on frames 2, 4 and 9 of 12, so every tap lands on a rendered frame
+    tap = sum(bump(t, c - 1 / 12, c + 1 / 12) for c in (2 / 12, 4 / 12, 9 / 12))
+    b = S(TAU * t)
+    apply_pose(p, {
+        **look,
+        "root_side": -0.025, "root_up": -0.006, "hips_roll": 4, "spine_roll": -3, "chest_roll": -1,
+        "chest_pitch": -1.5 * b, "lsh_up": 1.5 * b, "rsh_up": 1.5 * b,
+        "ra_fwd": 78, "ra_out": -14, "ra_elbow": 135 - 14 * tap,
+        "la_fwd": 18, "la_out": -6, "la_elbow": 65,
+        "lf_fwd": 0.012, "lf_toe": -10, "lf_out": 0.005,
+    })
+
+
+# One-shots ----------------------------------------------------------------------
+
+ARMS_REST = {"la_fwd": 0, "la_out": 0, "la_elbow": 0, "ra_fwd": 0, "ra_out": 0, "ra_elbow": 0}
+FEET_REST = {"lf_fwd": 0, "lf_up": 0, "lf_toe": 0, "rf_fwd": 0, "rf_up": 0, "rf_toe": 0, "feet_follow": 0}
+BOTH = lambda **kw: {f"{s}{k}": v for k, v in kw.items() for s in ("l", "r")}
+
+# Standing jump: slow anticipation crouch (arms back), a fast unease'd takeoff stretch onto
+# the toes with the arms leading, a tuck at the apex held a little longer than physics,
+# then a fall that accelerates and ends just before contact (chain into "land").
+JUMP_KEYS = [
+    (0.00, {"root_up": 0, "spine_pitch": 0, "head_pitch": 0, **ARMS_REST, **FEET_REST}, "io"),
+    (0.16, {"root_up": -0.035, "spine_pitch": 14, "head_pitch": -6, **BOTH(a_fwd=-25, a_elbow=12)}, "io"),
+    (0.30, {"root_up": -0.075, "spine_pitch": 30, "head_pitch": -16, **BOTH(a_fwd=-50, a_elbow=15, a_out=6)}, "io"),
+    (0.34, {}, "lin"),
+    (0.42, {"root_up": 0.05, "spine_pitch": -6, "head_pitch": -12, **BOTH(a_fwd=150, a_out=22, a_elbow=5, f_toe=-40)}, "lin"),
+    (0.52, {"root_up": 0.20, "feet_follow": 1, "spine_pitch": 0, **BOTH(a_fwd=135, a_elbow=25, f_toe=-20, f_up=0.02)}, "out"),
+    (0.62, {"root_up": 0.28, "spine_pitch": 10, "head_pitch": -6, **BOTH(a_fwd=95, a_out=30, a_elbow=60, f_toe=-8, f_up=0.06, f_fwd=0.02)}, "out"),
+    (0.72, {"root_up": 0.275}, "io"),
+    (0.84, {"root_up": 0.16, "spine_pitch": 2, "head_pitch": -2, **BOTH(a_fwd=25, a_out=60, a_elbow=30, f_toe=-15, f_up=0.0, f_fwd=0.0)}, "in"),
+    (0.95, {"root_up": 0.04}, "in"),
+    (1.00, {"root_up": 0.03}, "lin"),
+]
+
+# Landing: linear into contact, cut to the squash the frame after (no ease), the heavy
+# head keeps sinking a frame after the body stops, a small overshoot up, then settle.
+LAND_KEYS = [
+    (0.00, {"root_up": 0.03, "feet_follow": 1, "spine_pitch": 2, "head_pitch": -2, **BOTH(a_fwd=25, a_out=60, a_elbow=30, f_toe=-15)}, "lin"),
+    (0.12, {"root_up": 0.0, "feet_follow": 0, **BOTH(f_toe=0)}, "in"),
+    (0.22, {"root_up": -0.08, "spine_pitch": 28, "head_pitch": 8, **BOTH(a_fwd=35, a_out=18, a_elbow=35)}, "lin"),
+    (0.36, {"head_pitch": 14, **BOTH(a_fwd=28, a_out=10, a_elbow=30)}, "io"),
+    (0.56, {"root_up": 0.015, "spine_pitch": -3, "head_pitch": -5, **BOTH(a_fwd=-6, a_out=12, a_elbow=12)}, "out"),
+    (0.78, {"root_up": 0.0, "spine_pitch": 0, "head_pitch": 0, **BOTH(a_fwd=2, a_out=2, a_elbow=8)}, "io"),
+    (1.00, {**ARMS_REST}, "io"),
+]
+
+# Mantle onto a LEDGE_H ledge whose face is LEDGE_D ahead. The hands only reach about as
+# high as the shoulders, so it's the toddler-onto-a-sofa version: look up, crouch, hop and
+# reach, catch, pull (slow start), press the chest over the edge, knee up, stand. The body
+# goes up first, then forward (a hook, never a straight diagonal).
+LEDGE_H, LEDGE_D = 0.40, 0.14
+GRIP = {"h_fwd": 0.16, "h_up": 0.14, "h_out": -0.07}  # mitten on the ledge top, from the rest wrist
+CLIMB_KEYS = [
+    (0.00, {"hands_ik": 1, "hands_follow": 1, "head_pitch": -16, **FEET_REST, **BOTH(h_fwd=0, h_up=0, h_out=0)}, "io"),
+    (0.10, {"root_up": -0.04, "spine_pitch": 16, "head_pitch": -20, **BOTH(h_fwd=-0.05, h_up=0.02)}, "io"),
+    (0.20, {"root_up": 0.10, "feet_follow": 1, "spine_pitch": 0, "head_pitch": -12, "hands_follow": 0,
+            **BOTH(h_fwd=0.15, h_up=0.19, h_out=-0.07, f_toe=-30)}, "out"),
+    (0.28, {"root_up": 0.07, "root_fwd": 0.02, **{f"l{k}": v for k, v in GRIP.items()}, **{f"r{k}": v for k, v in GRIP.items()},
+            **BOTH(f_up=0.02, f_fwd=0.03, f_toe=-20)}, "in"),
+    (0.36, {"root_up": 0.09, "spine_pitch": 6, "lf_fwd": 0.0, "rf_fwd": 0.05}, "io"),
+    (0.50, {"root_up": 0.24, "root_fwd": 0.05, "spine_pitch": 15, "head_pitch": -6, "lf_up": 0.08, "lf_fwd": 0.06, "rf_up": 0.0, "rf_fwd": -0.02}, "io"),
+    (0.60, {"root_up": 0.34, "root_fwd": 0.12, "spine_pitch": 35, "chest_pitch": 8, "head_pitch": -4, "lf_up": 0.12, "lf_fwd": 0.08}, "out"),
+    (0.72, {"root_up": 0.36, "root_fwd": 0.20, "spine_pitch": 28, "chest_pitch": 6, "lf_follow": 0, "lf_up": LEDGE_H, "lf_fwd": 0.24, "lf_toe": 0,
+            "rf_follow": 1, "rf_up": 0.02, "rf_fwd": -0.04}, "io"),
+    (0.84, {"root_up": 0.40, "root_fwd": 0.26, "spine_pitch": 14, "chest_pitch": 2, "rf_follow": 0, "rf_up": LEDGE_H + 0.03, "rf_fwd": 0.25, "rf_toe": 5,
+            "hands_follow": 1, **BOTH(h_fwd=0.05, h_up=0.04, h_out=0.0)}, "io"),
+    (0.94, {"root_up": 0.41, "root_fwd": 0.30, "spine_pitch": 0, "chest_pitch": 0, "head_pitch": 2, "lf_fwd": 0.30, "rf_fwd": 0.30, "rf_up": LEDGE_H, "rf_toe": 0,
+            **BOTH(h_fwd=0, h_up=0)}, "out"),
+    (1.00, {"root_up": 0.40, "head_pitch": 0}, "io"),
+]
+
+# Success / idea: dip with the fists drawn in, a one-frame pop into a hop with the arms in a
+# V and the head snapping up first, overshoot, two small fist pumps, settle with each arm
+# segment a beat behind the last.
+SUCCESS_KEYS = [
+    (0.00, {"root_up": 0, "spine_pitch": 0, "head_pitch": 0, **ARMS_REST, **FEET_REST}, "io"),
+    (0.14, {"root_up": -0.035, "spine_pitch": 12, "head_pitch": 10, **BOTH(a_fwd=28, a_out=-6, a_elbow=110)}, "io"),
+    (0.22, {}, "lin"),
+    (0.30, {"root_up": 0.09, "feet_follow": 1, "spine_pitch": -10, "head_pitch": -16, **BOTH(a_fwd=30, a_out=120, a_elbow=25, f_toe=-35)}, "lin"),
+    (0.40, {"root_up": 0.10, "head_pitch": -20, **BOTH(a_out=132, a_elbow=18)}, "out"),
+    (0.50, {"root_up": -0.02, "feet_follow": 0, "spine_pitch": -4, "head_pitch": -12, **BOTH(f_toe=0, a_out=118)}, "in"),
+    (0.56, {"root_up": 0.01}, "out"),
+    (0.62, {"root_up": 0.0, **BOTH(a_out=100, a_elbow=75)}, "io"),
+    (0.70, {**BOTH(a_out=125, a_elbow=30)}, "out"),
+    (0.78, {**BOTH(a_out=100, a_elbow=75)}, "io"),
+    (0.88, {"spine_pitch": 0, "head_pitch": -4, **BOTH(a_fwd=10, a_out=20, a_elbow=40)}, "io"),
+    (1.00, {"head_pitch": 0, **ARMS_REST}, "io"),
+]
+
+# Failure: a beat, a sigh (inhale lifts chest and shoulders), then a slow exhale into a
+# slump at double timing: spine and head down, shoulders dropped and rounded forward past
+# where they started, arms hanging, knees soft. Ends slumped.
+FAILURE_KEYS = [
+    (0.00, {"root_up": 0, "spine_pitch": 0, "chest_pitch": 0, "head_pitch": 0, "hips_pitch": 0, **ARMS_REST, **BOTH(sh_up=0, sh_fwd=0)}, "io"),
+    (0.08, {"head_pitch": -4, "root_up": 0.005}, "out"),
+    (0.14, {}, "lin"),
+    (0.42, {"root_up": 0.01, "chest_pitch": -5, "head_pitch": -8, **BOTH(sh_up=8, a_out=4)}, "io"),
+    (0.50, {}, "lin"),
+    (0.86, {"root_up": -0.02, "hips_pitch": -4, "spine_pitch": 12, "chest_pitch": 10, "head_pitch": 12,
+            **BOTH(sh_up=-11, sh_fwd=10, a_fwd=9, a_out=-5, a_elbow=8)}, "out"),
+    (0.93, {"head_pitch": 15, **BOTH(sh_up=-12)}, "io"),
+    (1.00, {"head_pitch": 13, **BOTH(sh_up=-10)}, "io"),
+]
+
+clip_jump = posed(JUMP_KEYS, {"head_": 0.04, "la_": -0.03, "ra_": -0.03})
+clip_land = posed(LAND_KEYS, {"head_": 0.08, "la_elbow": 0.05, "ra_elbow": 0.05})
+clip_climb = posed(CLIMB_KEYS, {"head_": 0.04})
+clip_success = posed(SUCCESS_KEYS, {"head_": -0.02, "la_elbow": 0.04, "ra_elbow": 0.04})
+clip_failure = posed(FAILURE_KEYS, {"head_": 0.03, "la_": 0.04, "ra_": 0.04})
 
 
 def clip_wave(p: Poser, t: float, s: float) -> None:
@@ -615,10 +1115,13 @@ def clip_nod(p: Poser, t: float, s: float) -> None:
 
 
 CLIPS = [
-    ("idle", 3.0, clip_idle), ("attentive", 2.5, clip_attentive), ("thinking", 3.0, clip_thinking),
+    ("idle", 3.0, clip_idle), ("attentive", 2.5, clip_attentive), ("thinking", 3.2, clip_thinking),
     ("searching", 3.0, clip_searching), ("talking", 2.0, clip_talking), ("sleeping", 4.0, clip_sleeping),
-    ("walk", 0.8, clip_walk), ("run", 0.5, clip_run), ("wave", 1.6, clip_wave), ("point", 1.4, clip_point), ("happy", 1.2, clip_happy),
+    ("walk", WALK_SECONDS, clip_walk), ("run", RUN_SECONDS, clip_run), ("wave", 1.6, clip_wave), ("point", 1.4, clip_point), ("happy", 1.2, clip_happy),
     ("sorry", 1.8, clip_sorry), ("excited", 1.4, clip_excited), ("nod", 1.0, clip_nod),
+    # one-shots for the sprite sheets (LKF configs/sprites/omni3.toml)
+    ("jump", 1.0, clip_jump), ("land", 0.6, clip_land), ("climb", 1.6, clip_climb),
+    ("success", 1.3, clip_success), ("failure", 2.4, clip_failure),
 ]
 
 
@@ -711,10 +1214,16 @@ def main() -> None:
     bpy.ops.mesh.normals_make_consistent(inside=False)
     bpy.ops.object.mode_set(mode="OBJECT")
 
-    L = landmarks(mesh_obj)
+    L = landmarks(mesh_obj, args.leg_joints)
+    if args.arms != "auto":
+        L["arms_fused"] = args.arms == "fused"
+    if args.arm_rest is not None:
+        L["arm_rest_deg"] = 0.0 if L["arms_fused"] else args.arm_rest
     arm = build_armature(L)
     weights = skin(mesh_obj, arm)
     protect = protect_torso(mesh_obj, L)
+    if args.rigid:
+        protect["rigid_verts"] = rigidify(mesh_obj)
     weighted = sum(1 for v in mesh_obj.data.vertices if any(g.weight > 0.001 for g in v.groups))
     weight_fraction = weighted / max(1, len(mesh_obj.data.vertices))
     if weight_fraction < 0.5:
@@ -738,7 +1247,7 @@ def main() -> None:
 
     poser = Poser(arm, arm_motion, L["arm_rest_deg"])
     for name, seconds, fn in CLIPS:
-        poser.clip(name, seconds, fn)
+        poser.clip(name, seconds, fn, step=1)
     poser.reset()
 
     poses = render_poses(arm, mesh_obj, Path(args.poses).resolve(), L) if args.poses else []
