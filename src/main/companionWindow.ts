@@ -107,7 +107,7 @@ export class CompanionWindow {
     this.feet = home;
     return {
       modelUrl: this.modelUrl(s.modelUrl),
-      spritesUrl: s.sprites ? this.spritesUrl() : null,
+      spritesUrl: s.sprites ? this.spritesUrl(s.spritePack) : null,
       faceUrls: this.faceUrls(),
       canvas: { width, height, dpr: screen.getPrimaryDisplay().scaleFactor },
       home,
@@ -126,10 +126,14 @@ export class CompanionWindow {
     return out;
   }
 
-  /** The bundled omni3 sprite atlas, or null if it is missing. */
-  spritesUrl(): string | null {
-    const atlas = join(app.getAppPath(), 'assets', 'sprites', 'omni3', 'atlas.json');
-    return existsSync(atlas) ? pathToFileURL(atlas).href : null;
+  /** User-chosen sprite pack, else the bundled Data Monster (then the omni3 pixel robot), or null if none is there. */
+  spritesUrl(custom: string | null): string | null {
+    if (custom) return custom;
+    for (const pack of ['data-monster', 'omni3']) {
+      const atlas = join(app.getAppPath(), 'assets', 'sprites', pack, 'atlas.json');
+      if (existsSync(atlas)) return pathToFileURL(atlas).href;
+    }
+    return null;
   }
 
   /** Reload the renderer page; it reads its config again, so this switches between 3D and sprites. */

@@ -1,10 +1,13 @@
 # Omni Support
 
-A small 3D helper that lives on your macOS desktop. Point it at anything on screen (an
+A small helper that lives on your macOS desktop. Point it at anything on screen (an
 error, a setting, a product, a paragraph) and it looks it up for you with Claude, then
 answers in a speech bubble. Reply to keep the conversation going, or click the helper to
 just chat. It remembers what you tell it, so you don't have to repeat yourself, and you can
 give it any name you like (it's called **Omni** until you do).
+
+The default helper is the **Data Monster**, a 2D sprite character; a 3D robot is bundled
+too, and you can load your own sprite pack or GLB model.
 
 Open source from [Little Kettle Studios](https://github.com/littlekettlestudios).
 
@@ -20,8 +23,8 @@ Open source from [Little Kettle Studios](https://github.com/littlekettlestudios)
   (`Remembered: …` under an answer) and sends them with later questions. See, edit or wipe
   them in the Memory tab.
 - **Name it.** Type a name in Setup or Settings, or just say "I'll call you Pip".
-- **Settings window.** Name, size, 2D pixel or 3D look, your own GLB model, Claude Code or
-  Anthropic API, model, web search and shortcut, plus a Setup checklist.
+- **Settings window.** Name, size, 3D model or 2D sprites, your own GLB or sprite pack,
+  Claude Code or Anthropic API, model, web search and shortcut, plus a Setup checklist.
 
 ## Requirements
 
@@ -37,23 +40,35 @@ Open source from [Little Kettle Studios](https://github.com/littlekettlestudios)
 
 ## Quick start
 
-```bash
-git clone https://github.com/littlekettlestudios/omnisupport.git
-cd omnisupport
-npm install
-npm run dist     # builds release/mac-arm64/Omni Support.app
-```
+1. **Sign in to Claude Code** (or have an API key ready):
 
-Drag **Omni Support.app** into Applications, open it, and right-click its Dock icon →
-**Options → Keep in Dock** if you want it there. On first launch the helper waves and the **Setup** window opens: name your helper, then
-follow the checklist (Claude Code sign-in or API key, Screen Recording). After that:
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   claude            # then /login
+   ```
 
-1. Press `⌃⌥Space`, drag over something, add a note or just press Enter.
-2. Reply in the bubble to follow up, or press Esc to close it.
-3. Click the helper any time to chat. The menu-bar icon has Chat, Settings and Setup.
+2. **Build and install the app:**
 
-The full walkthrough, including permissions and troubleshooting, is in
-[docs/setup.md](docs/setup.md).
+   ```bash
+   git clone https://github.com/littlekettlestudios/omnisupport.git
+   cd omnisupport
+   npm install
+   npm run dist
+   ditto "release/mac-arm64/Omni Support.app" "/Applications/Omni Support.app"
+   ```
+
+   On an Intel Mac the app is in `release/mac/` instead.
+
+3. **Open Omni Support** from Applications. The helper waves and the **Setup** window
+   opens: name your helper, then follow the checklist (Claude Code sign-in or API key,
+   Screen Recording). Right-click the Dock icon → **Options → Keep in Dock** to keep it.
+
+4. **Use it:** press `⌃⌥Space` and drag over something on screen, or click the helper to
+   chat. Reply in the bubble to follow up; Esc closes it.
+
+The full walkthrough (prerequisites, permissions, settings, updating, troubleshooting and
+uninstalling) is in [docs/setup.md](docs/setup.md). Using it on a work Mac? Read
+[Using it at work](docs/privacy.md#using-it-at-work) first.
 
 ## Caveats
 
@@ -71,8 +86,10 @@ The full walkthrough, including permissions and troubleshooting, is in
 - **Memory is plain JSON on disk** (`memory.json` in the data folder). Don't tell it
   secrets; it is told not to save passwords, keys, financial or health details.
 - **Answers can be wrong.** Check anything important against the linked sources.
-- The bundled robot and sprite sheets were generated with image-to-3D tools and rigged by
-  `pipeline/autorig.py`. Its motion is "charming toy", not mocap.
+- **The bundled characters are AI-generated.** The Data Monster sprite sheet was made with
+  image-generation tools and sliced by `scripts/make_sprite_pack.py`; the omni3 robot came
+  from image-to-3D tools and was rigged by `pipeline/autorig.py`, so its motion is
+  "charming toy", not mocap.
 
 ## Docs
 

@@ -212,10 +212,14 @@ nameInput.addEventListener('change', () => { if (nameInput.value.trim()) void sa
 const scale = $<HTMLInputElement>('scale');
 scale.addEventListener('input', () => { $('scale-label').textContent = `${scale.value} px tall`; });
 scale.addEventListener('change', () => void save({ scale: Number(scale.value) }));
-$('sprites').addEventListener('change', (e) => void save({ sprites: (e.target as HTMLInputElement).checked }));
+for (const r of document.querySelectorAll<HTMLInputElement>('input[name=look]')) {
+  r.addEventListener('change', () => { if (r.checked) void save({ sprites: r.value === '2d' }); });
+}
 $('dock').addEventListener('change', (e) => void save({ dock: (e.target as HTMLInputElement).checked }));
 $('model-choose').addEventListener('click', async () => apply(await panel.chooseModel()));
 $('model-reset').addEventListener('click', async () => apply(await panel.resetModel()));
+$('sprites-choose').addEventListener('click', async () => apply(await panel.chooseSprites()));
+$('sprites-reset').addEventListener('click', async () => apply(await panel.resetSprites()));
 for (const r of document.querySelectorAll<HTMLInputElement>('input[name=backend]')) {
   r.addEventListener('change', () => { if (r.checked) void save({ backend: r.value as PanelSettings['backend'] }); });
 }
@@ -301,10 +305,12 @@ function apply(s: PanelState): void {
   if (document.activeElement !== welcomeName && !welcomeName.value) welcomeName.value = st.name;
   scale.value = String(st.scale);
   $('scale-label').textContent = `${st.scale} px tall`;
-  $<HTMLInputElement>('sprites').checked = st.sprites;
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[name=look]')) r.checked = r.value === (st.sprites ? '2d' : '3d');
   $<HTMLInputElement>('dock').checked = st.dock;
   $('model-label').textContent = s.customModel ? 'Using your own GLB.' : 'Using the bundled omni3 robot.';
   $<HTMLButtonElement>('model-reset').disabled = !s.customModel;
+  $('sprites-label').textContent = s.customSprites ? 'Using your own sprite pack.' : 'Using the bundled Data Monster.';
+  $<HTMLButtonElement>('sprites-reset').disabled = !s.customSprites;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name=backend]')) r.checked = r.value === st.backend;
   $('row-model').style.display = st.backend === 'claude-code' ? '' : 'none';
   $('row-key').style.display = st.backend === 'api' ? '' : 'none';

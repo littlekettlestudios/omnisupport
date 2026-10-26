@@ -48,7 +48,8 @@
       "assets/**",
       "resources/**",
       "package.json",
-      "!assets/**/*.blend*"
+      "!assets/**/*.blend*",
+      "!assets/sprites/*/source/**"
     ],
     "mac": {
       "icon": "resources/icon.icns",

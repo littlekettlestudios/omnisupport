@@ -141,10 +141,12 @@ one. Models without `FaceScreen` ignore all of this.
 
 ## Sprite mode (2D)
 
-With `config.spritesUrl` set (the tray's **Pixel sprites (2D)**, settings `"sprites": true`),
-`entry.ts` loads `sprites.ts` instead of the 3D renderer. It plays the pixel sheets in
-`assets/sprites/omni3/` (rendered from `omni3.glb`, described by `atlas.json`) under the same
-commands and events:
+With `config.spritesUrl` set (Settings → Look → **2D sprites**, settings `"sprites": true`),
+`entry.ts` loads `sprites.ts` instead of the 3D renderer; it is the default look. It plays a
+sprite pack: by default the painted Data Monster in `assets/sprites/data-monster/`, or the
+pack chosen with **Choose sprite pack…** (settings `"spritePack"`). The pixel sheets in
+`assets/sprites/omni3/` (rendered from `omni3.glb`) are the fallback and can be chosen too. A pack is a folder with `atlas.json`
+and the sheets it names. It plays under the same commands and events:
 
 | protocol | sheet |
 |---|---|
@@ -155,10 +157,31 @@ commands and events:
 | react sorry | `failure` with the rain cloud |
 
 The facing (one of 8) follows the travel direction, then the `lookAt` target; with no
-target it faces the viewer (S). Sprite pixels are drawn at a whole-number zoom, the one
-closest to `config.scale` / the atlas's `pixels_per_metre`. Hover hit-tests the opaque
-pixels of the current frame. `reload` reloads the page, which is also how main switches
+target it faces the viewer (S). A clip without that facing uses the nearest it has: SW → W,
+then the front (S), then the side it last faced, so a pack with only S, W and E works.
+Pixel art (the default) is drawn at a whole-number zoom, the one closest to `config.scale` /
+the atlas's `pixels_per_metre`; a pack with `"pixel_art": false` scales smoothly to exactly
+that. Emotes (`emotes`, `anchors`) are optional; painted packs usually draw them into the
+frames. Hover hit-tests the opaque pixels of the current frame. `reload` reloads the page, which is also how main switches
 between 2D and 3D. `jump`, `land` and `climb` are in the atlas but no command plays them yet.
+
+### Making a pack from a sprite sheet
+
+`scripts/make_sprite_pack.py` turns a grid sheet (one pose per cell, transparent
+background) into a pack. Describe which cells make each clip in a layout file, as in
+`scripts/sprite-layout.example.json` (an 8 × 5 sheet: idle, walk left, walk right, thinking,
+then success and failure sharing the last row), then:
+
+```bash
+python3 -m pip install pillow
+python3 scripts/make_sprite_pack.py my-character/layout.json my-character/pack
+```
+
+Shapes that spill over their cell (a jump, a sparkle) are kept with the cell their centre
+falls in, `"stabilize": true` holds walk cycles in place, and each facing row is moved onto
+the same ground line. The clips the app uses are `idle`, `walk`, `thinking`, `success` and
+`failure` (plus `run` if present); a missing one falls back to `idle`. Then pick the `pack`
+folder in Settings → **Choose sprite pack…**; it is copied into the data folder.
 
 ## Timing expectations
 

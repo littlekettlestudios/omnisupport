@@ -1,6 +1,6 @@
 import { app, dialog, globalShortcut, Menu, systemPreferences } from 'electron';
-import { copyFileSync, cpSync, existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CompanionWindow } from './companionWindow';
 import { BubbleWindow } from './bubbleWindow';
@@ -80,6 +80,7 @@ async function panelState(recheck = false): Promise<PanelState> {
     hasApiKey: !!s.apiKey,
     apiKeyFromEnv: envKey,
     customModel: s.modelUrl !== null,
+    customSprites: s.spritePack !== null,
     memories: listMemories(),
     conversation: chat.current,
     shortcutLabel: shortcutLabel(activeShortcut()),
@@ -181,12 +182,41 @@ function resetModel(): void {
   rebuildTray();
 }
 
+/** Pick a sprite pack folder (atlas.json plus its sheets), copy it into the data folder and show it. */
+async function chooseSprites(): Promise<void> {
+  const r = await dialog.showOpenDialog({ title: 'Choose a sprite pack folder (with atlas.json)', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return;
+  const src = r.filePaths[0];
+  try {
+    const atlas = JSON.parse(readFileSync(join(src, 'atlas.json'), 'utf8'));
+    if (!atlas.clips || typeof atlas.clips !== 'object' || !Object.keys(atlas.clips).length) throw new Error('atlas.json lists no clips');
+  } catch (err) {
+    void dialog.showMessageBox({ type: 'warning', message: 'That folder is not a sprite pack.', detail: `It needs an atlas.json with clips, as made by scripts/make_sprite_pack.py. (${(err as Error).message})` });
+    return;
+  }
+  const dest = join(app.getPath('userData'), 'sprites', `${basename(src)}-${Date.now()}`);
+  mkdirSync(dest, { recursive: true });
+  cpSync(src, dest, { recursive: true });
+  // Picking a pack means showing it.
+  saveSettings({ ...loadSettings(), spritePack: pathToFileURL(join(dest, 'atlas.json')).href, sprites: true });
+  companion.reloadRenderer();
+  rebuildTray();
+}
+
+function resetSprites(): void {
+  const s = loadSettings();
+  saveSettings({ ...s, spritePack: null });
+  if (s.sprites) companion.reloadRenderer();
+}
+
 const panel = new PanelWindow({
   state: panelState,
   saveSettings: applySettings,
   setApiKey: (key) => saveSettings({ ...loadSettings(), apiKey: key }),
   chooseModel,
   resetModel,
+  chooseSprites,
+  resetSprites,
   openTerminal: openSignInTerminal,
 }, chat);
 

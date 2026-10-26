@@ -143,17 +143,25 @@
             <input type="range" id="scale" min="90" max="260" step="10" />
           </div>
           <div class="row">
-            <label for="sprites">Pixel sprites (2D)<small>Draw the helper as pixel art instead of the 3D model.</small></label>
-            <input type="checkbox" id="sprites" />
-          </div>
-          <div class="row">
             <label for="dock">Show in Dock<small>Click the Dock icon to open this window. Off leaves only the menu-bar icon.</small></label>
             <input type="checkbox" id="dock" />
+          </div>
+          <div class="row">
+            <div class="label">Look<small>A 3D model, or a 2D sprite pack drawn flat.</small></div>
+            <div class="seg">
+              <label><input type="radio" name="look" value="3d" /><span>3D model</span></label>
+              <label><input type="radio" name="look" value="2d" /><span>2D sprites</span></label>
+            </div>
           </div>
           <div class="row">
             <div class="label">3D model<small id="model-label"></small></div>
             <button class="btn" id="model-choose">Choose GLB…</button>
             <button class="btn" id="model-reset">Use default</button>
+          </div>
+          <div class="row">
+            <div class="label">2D sprites<small id="sprites-label"></small></div>
+            <button class="btn" id="sprites-choose">Choose sprite pack…</button>
+            <button class="btn" id="sprites-reset">Use default</button>
           </div>
         </div>
         <h3>Answers</h3>

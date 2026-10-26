@@ -30,7 +30,7 @@ Omni Support is an Electron menu-bar app with four kinds of window and one conve
   around the model and tells main to toggle `setIgnoreMouseEvents`. Main also polls the
   cursor because macOS sometimes stops forwarding mouse moves to click-through windows.
   The contract is [companion-protocol.md](companion-protocol.md); `entry.ts` picks the 3D
-  renderer (`index.ts`) or the pixel sprite renderer (`sprites.ts`).
+  renderer (`index.ts`) or the 2D sprite-pack renderer (`sprites.ts`).
 - **Bubble** (`src/renderer/bubble/`): ordinary DOM in its own small window anchored next to
   the character's head, so text input, selection and links work without fighting the
   click-through logic. It shows a region thumbnail and note box, a chat box, or a card
@@ -92,7 +92,10 @@ data folder from the project's working name (`Clippet`) is copied over once.
 
 ## Character assets
 
-`assets/omni3.glb` is the bundled character: 1 m tall, Mixamo bone names, and the protocol
-clips plus `run`, `jump`, `land`, `climb`, `success` and `failure`. `assets/sprites/omni3/`
-holds pixel sheets rendered from it in 8 directions, described by `atlas.json`. The Blender
+The default character is the Data Monster sprite pack in `assets/sprites/data-monster/`:
+painted frames facing front, left and right, built from `source/sheet.png` and
+`source/layout.json` by `scripts/make_sprite_pack.py` (the `source/` folder is left out of
+the packaged app). `assets/omni3.glb` is the 3D character: 1 m tall, Mixamo bone names, and
+the protocol clips plus `run`, `jump`, `land`, `climb`, `success` and `failure`.
+`assets/sprites/omni3/` holds pixel sheets rendered from it in 8 directions. The Blender
 scripts that made and rigged it are in `pipeline/`.

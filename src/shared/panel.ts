@@ -38,6 +38,7 @@ export interface PanelState {
   hasApiKey: boolean;
   apiKeyFromEnv: boolean;
   customModel: boolean;
+  customSprites: boolean;
   memories: MemoryFact[];
   conversation: ConversationView | null;
   /** Shortcut actually registered, as macOS glyphs. */
@@ -61,6 +62,8 @@ export interface PanelBridge {
   stop(): void;
   chooseModel(): Promise<PanelState>;
   resetModel(): Promise<PanelState>;
+  chooseSprites(): Promise<PanelState>;
+  resetSprites(): Promise<PanelState>;
   openTerminal(): void;
   openScreenSettings(): void;
   openDataFolder(): void;
@@ -82,6 +85,8 @@ export const PANEL_IPC = {
   stop: 'panel:stop',
   chooseModel: 'panel:chooseModel',
   resetModel: 'panel:resetModel',
+  chooseSprites: 'panel:chooseSprites',
+  resetSprites: 'panel:resetSprites',
   openTerminal: 'panel:openTerminal',
   openScreenSettings: 'panel:openScreenSettings',
   openDataFolder: 'panel:openDataFolder',
