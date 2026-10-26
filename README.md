@@ -20,8 +20,8 @@ Open source from [Little Kettle Studios](https://github.com/littlekettlestudios)
   (`Remembered: …` under an answer) and sends them with later questions. See, edit or wipe
   them in the Memory tab.
 - **Name it.** Type a name in Setup or Settings, or just say "I'll call you Pip".
-- **Settings window.** Name, size, 2D pixel or 3D look, your own GLB model, Claude Code or
-  Anthropic API, model, web search and shortcut, plus a Setup checklist.
+- **Settings window.** Name, size, 3D model or 2D sprites, your own GLB or sprite pack,
+  Claude Code or Anthropic API, model, web search and shortcut, plus a Setup checklist.
 
 ## Requirements
 

@@ -91,8 +91,9 @@ Menu bar → **Settings…**, or ⌘, while the app is in front.
 |---|---|
 | Name | What the helper calls itself. |
 | Size | Height in pixels (default 150). |
-| Pixel sprites (2D) | Draw the helper from the bundled pixel sheets instead of the 3D model. |
+| Look | **3D model** or **2D sprites**. |
 | Show in Dock | Keep a Dock icon that opens the chat window. Off makes it a menu-bar-only app. |
+| 2D sprites | **Choose sprite pack…** loads your own 2D character (a folder with `atlas.json`; make one from a sprite sheet with `scripts/make_sprite_pack.py`, see [companion-protocol.md](companion-protocol.md#making-a-pack-from-a-sprite-sheet)). **Use default** goes back to the bundled pixel robot. |
 | 3D model | Load your own `.glb`. Rigged models should use the clip and bone names in [companion-protocol.md](companion-protocol.md); a static model gets procedural motion. **Use default** goes back to the bundled robot. |
 | Answer with | Claude Code (subscription) or Anthropic API (key). |
 | Claude Code model | Sonnet (default), Opus (deeper, uses more of your limits) or Haiku (fastest). |

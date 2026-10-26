@@ -30,7 +30,7 @@ Omni Support is an Electron menu-bar app with four kinds of window and one conve
   around the model and tells main to toggle `setIgnoreMouseEvents`. Main also polls the
   cursor because macOS sometimes stops forwarding mouse moves to click-through windows.
   The contract is [companion-protocol.md](companion-protocol.md); `entry.ts` picks the 3D
-  renderer (`index.ts`) or the pixel sprite renderer (`sprites.ts`).
+  renderer (`index.ts`) or the 2D sprite-pack renderer (`sprites.ts`).
 - **Bubble** (`src/renderer/bubble/`): ordinary DOM in its own small window anchored next to
   the character's head, so text input, selection and links work without fighting the
   click-through logic. It shows a region thumbnail and note box, a chat box, or a card
