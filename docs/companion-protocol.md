@@ -1,9 +1,9 @@
 # Companion protocol
 
-The contract between the Electron main process (owned by Claude) and the companion
-renderer (owned by Codex). Everything crosses the preload bridge as plain JSON. Neither
-side imports the other's code. If you need to change this file, change it first and tell
-the other side.
+The contract between the Electron main process (`src/main/`) and the companion renderer
+(`src/renderer/companion/`). Everything crosses the preload bridge as plain JSON. Neither
+side imports the other's code, so a new renderer only has to speak this protocol. Change
+this file together with `src/shared/protocol.ts`.
 
 The renderer gets one object, `window.clippet`, from the preload script:
 
@@ -104,7 +104,7 @@ anything while hidden (`setVisible false`) as a miss.
 
 ## Clip names in the GLB
 
-`assets/clippet.glb` animations are named exactly:
+The character GLB (bundled: `assets/omni3.glb`) names its animations exactly:
 
 | name | used for |
 |---|---|
@@ -115,9 +115,9 @@ anything while hidden (`setVisible false`) as a miss.
 | `talking` | state talking (fallback: idle + small nod cycle) |
 | `sleeping` | state sleeping (fallback: idle at half speed, head down) |
 | `walk` | moveTo travel |
-| `run` | not used by the renderer yet (LKF pixel sprite sheets) |
+| `run` | not used by the 3D renderer yet (sprite sheets) |
 | `wave`, `point`, `happy`, `sorry`, `excited`, `nod` | reactions |
-| `jump`, `land`, `climb`, `success`, `failure` | not used by the renderer yet (LKF pixel sprite sheets). `jump` and `climb` carry root motion on the Hips (up 0.28 m; up 0.40 m and forward 0.30 m) |
+| `jump`, `land`, `climb`, `success`, `failure` | not used by the 3D renderer yet (sprite sheets). `jump` and `climb` carry root motion on the Hips (up 0.28 m; up 0.40 m and forward 0.30 m) |
 
 Bone names follow Mixamo (`mixamorig:Head`, `mixamorig:Neck`, `mixamorig:Spine1`), which
 is what `lookAt` should drive. Scale: the model is 1 m tall at origin, feet at y=0, facing
@@ -142,8 +142,8 @@ one. Models without `FaceScreen` ignore all of this.
 ## Sprite mode (2D)
 
 With `config.spritesUrl` set (the tray's **Pixel sprites (2D)**, settings `"sprites": true`),
-`entry.ts` loads `sprites.ts` instead of the 3D renderer. It plays the LKF sheets in
-`assets/sprites/omni3/` (atlas.json from LKF's `configs/sprites/omni3.toml`) under the same
+`entry.ts` loads `sprites.ts` instead of the 3D renderer. It plays the pixel sheets in
+`assets/sprites/omni3/` (rendered from `omni3.glb`, described by `atlas.json`) under the same
 commands and events:
 
 | protocol | sheet |

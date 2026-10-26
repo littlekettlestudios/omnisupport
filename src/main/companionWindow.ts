@@ -116,7 +116,7 @@ export class CompanionWindow {
     };
   }
 
-  /** Face textures shipped in assets/face, keyed by mood. */
+  /** Face textures in assets/face, keyed by mood (none are bundled; see pipeline/README.md). */
   faceUrls(): Partial<Record<FaceMood, string>> {
     const out: Partial<Record<FaceMood, string>> = {};
     for (const mood of ['idle', 'happy', 'thinking', 'sorry'] as const) {
@@ -126,7 +126,7 @@ export class CompanionWindow {
     return out;
   }
 
-  /** The bundled sprite atlas (LKF's configs/sprites/omni3.toml output), or null if it is missing. */
+  /** The bundled omni3 sprite atlas, or null if it is missing. */
   spritesUrl(): string | null {
     const atlas = join(app.getAppPath(), 'assets', 'sprites', 'omni3', 'atlas.json');
     return existsSync(atlas) ? pathToFileURL(atlas).href : null;
@@ -137,11 +137,9 @@ export class CompanionWindow {
     this.win?.webContents.reload();
   }
 
-  /** User-chosen model, else the rigged asset, else the static placeholder. */
+  /** User-chosen model, else the bundled omni3 robot (the renderer draws a procedural stand-in if that fails to load). */
   modelUrl(custom: string | null): string {
-    if (custom) return custom;
-    const rigged = join(app.getAppPath(), 'assets', 'clippet.glb');
-    return pathToFileURL(existsSync(rigged) ? rigged : join(app.getAppPath(), 'assets', 'placeholder.glb')).href;
+    return custom ?? pathToFileURL(join(app.getAppPath(), 'assets', 'omni3.glb')).href;
   }
 
   private handleEvent(win: BrowserWindow, event: RendererEvent): void {

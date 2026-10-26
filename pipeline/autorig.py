@@ -1,7 +1,7 @@
-"""Auto-rig a clean Clippet mesh and author the protocol's clips, no Mixamo needed:
+"""Auto-rig a clean character mesh and author the protocol's clips, no Mixamo needed:
 
     blender -b --factory-startup -P pipeline/autorig.py -- \
-        --input build/remesh/sprout_lowpoly.glb --out assets/clippet.glb [--poses build/poses]
+        --input build/mixamo/character_lowpoly.glb --out build/character.glb [--poses build/poses]
 
 Fits a Mixamo-named humanoid armature from silhouette landmarks (head, neck, shoulders,
 crotch, knees, ankles from cross-section widths), skins it with Blender's automatic
@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--input", required=True, help="clean GLB or FBX from decimate.py")
     ap.add_argument("--out", required=True)
     ap.add_argument("--poses", help="folder for one render per clip")
-    ap.add_argument("--face", default=None, help="idle face PNG for the FaceScreen patch (default assets/face/idle.png next to the repo)")
+    ap.add_argument("--face", default=None, help="idle face PNG for the FaceScreen patch (default build/face/idle.png in the repo)")
     ap.add_argument("--no-face", action="store_true", help="skip the FaceScreen patch")
     ap.add_argument("--arm-motion", type=float, default=None, help="arm swing scale 0..1; default 1, or 0.35 when the arms are drawn against the body")
     ap.add_argument("--arms", choices=("auto", "free", "fused"), default="auto", help="override the fused-arms detection (short arms whose hands hang at hip height read as fused)")
@@ -1238,7 +1238,7 @@ def main() -> None:
     face_info: dict = {}
     extra: list[bpy.types.Object] = []
     if not args.no_face:
-        face_png = Path(args.face).resolve() if args.face else Path(__file__).resolve().parent.parent / "assets" / "face" / "idle.png"
+        face_png = Path(args.face).resolve() if args.face else Path(__file__).resolve().parent.parent / "build" / "face" / "idle.png"
         if face_png.exists():
             face_info = add_face_screen(mesh_obj, arm, L, face_png)
             extra = [o for o in bpy.context.scene.objects if o.name == "FaceScreen"]

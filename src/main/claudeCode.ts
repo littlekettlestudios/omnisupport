@@ -1,17 +1,19 @@
 import { spawn, execFile } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentEvent, Mood } from '@shared/bubble';
+import type { AgentEvent } from '@shared/bubble';
 import { SIGN_IN_ACTIONS } from './onboarding';
-import { SYSTEM, MOOD_RE } from './agent';
-import type { LookupInput } from './agent';
+import { userText } from './prompt';
+import type { Turn } from './prompt';
 
 /**
  * Lookup through the locally installed Claude Code CLI in headless mode (`claude -p`).
- * Runs on whatever login the CLI has (a Claude subscription, by default). Clippet never
- * reads or stores credentials; it only spawns the user's own CLI. The screenshot is
- * written to a private temp dir for the Read tool and deleted afterwards.
+ * Runs on whatever login the CLI has (a Claude subscription, by default). The app never
+ * reads or stores credentials; it only spawns the user's own CLI. Screenshots are
+ * written to a private temp dir for the Read tool and deleted afterwards; Read may open
+ * nothing outside that dir. Each reply is a fresh, unsaved CLI session that ignores the
+ * user's own Claude Code settings; earlier turns of the conversation go into the prompt.
  */
 
 export interface ClaudeCodeOptions {
@@ -55,31 +57,60 @@ function extractSources(o: unknown): { url: string; title: string }[] {
   return out;
 }
 
-export async function lookupViaClaudeCode(input: LookupInput, onEvent: (e: AgentEvent) => void, opts: ClaudeCodeOptions = {}): Promise<void> {
+/** Build the -p prompt: the new message, with earlier turns replayed as a transcript. */
+async function buildPrompt(turns: Turn[], dir: string): Promise<string> {
+  const shots = new Map<Turn, string>();
+  for (const [i, t] of turns.entries()) {
+    if (!t.image) continue;
+    const path = join(dir, `region-${i + 1}.png`);
+    await writeFile(path, t.image, { mode: 0o600 });
+    shots.set(t, path);
+  }
+  const last = turns[turns.length - 1];
+  const lastShot = shots.get(last);
+  const ask = lastShot
+    ? `Read the screenshot at ${lastShot} with the Read tool, then help the user with what it shows.\n${userText(last)}`
+    : userText(last);
+  if (turns.length === 1) return ask;
+  const history = turns.slice(0, -1).map((t) => {
+    if (t.role === 'assistant') return `You: ${t.text}`;
+    const shot = shots.get(t);
+    return `User: ${shot ? `[screen region saved at ${shot}; Read it if you need it] ` : ''}${t.text.trim() || '(no note)'}`;
+  });
+  return `Conversation so far:\n\n${history.join('\n\n')}\n\nThe user's new message:\n${ask}`;
+}
+
+/**
+ * One reply through the local Claude Code CLI. Streams status, delta and source events and
+ * resolves with the full reply text (tags included), or null after an error event.
+ */
+export async function replyViaClaudeCode(turns: Turn[], system: string, onEvent: (e: AgentEvent) => void, opts: ClaudeCodeOptions = {}): Promise<string | null> {
   const bin = await findClaude(opts.claudePath);
   if (!bin) {
-    onEvent({ type: 'error', message: 'Claude Code CLI not found. Install it (npm i -g @anthropic-ai/claude-code) or set "claudePath" in settings.json.' });
-    return;
+    onEvent({ type: 'error', message: 'Claude Code CLI not found. Install it (npm install -g @anthropic-ai/claude-code), or set its path in Settings.', actions: [{ id: 'open-setup', label: 'Open Setup', primary: true }] });
+    return null;
   }
   const dir = await mkdtemp(join(tmpdir(), 'clippet-'));
-  const shot = join(dir, 'shot.png');
-  await writeFile(shot, input.imagePng, { mode: 0o600 });
-
-  const tools = opts.webSearch === false ? 'Read' : 'Read,WebSearch,WebFetch';
-  const prompt = [
-    `Read the screenshot at ${shot} with the Read tool, then help the user with what it shows.`,
-    input.context ? `Context: ${input.context}` : null,
-    input.note.trim() ? `Note from the user: ${input.note.trim()}` : 'The user did not add a note. Work out what they most likely need from the region.',
-  ].filter(Boolean).join('\n');
+  const tools = opts.webSearch === false ? ['Read'] : ['Read', 'WebSearch', 'WebFetch'];
+  // Pre-approve Read for the screenshot dir only; with dontAsk every other path is denied, so
+  // text in a captured region cannot get the model to open other files on the Mac. Rules
+  // match the resolved path (macOS temp dirs sit behind the /var -> /private/var symlink),
+  // and `//` marks an absolute path.
+  const readRule = `Read(/${await realpath(dir)}/**)`;
+  const allowed = tools.map((t) => (t === 'Read' ? readRule : t));
+  const prompt = await buildPrompt(turns, dir);
 
   const args = [
     '-p', prompt,
     '--model', opts.model ?? 'sonnet',
-    '--tools', tools,
-    '--allowedTools', tools,
+    '--tools', tools.join(','),
+    '--allowedTools', allowed.join(','),
     '--disallowedTools', 'mcp__*',
     '--permission-mode', 'dontAsk',
-    '--system-prompt', SYSTEM,
+    // Project settings only (the empty temp dir has none): the user's own allow rules, hooks
+    // and plugins would otherwise apply here and could widen the Read rule above.
+    '--setting-sources', 'project',
+    '--system-prompt', system,
     '--no-session-persistence',
     '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
   ];
@@ -92,6 +123,7 @@ export async function lookupViaClaudeCode(input: LookupInput, onEvent: (e: Agent
   let text = '';
   let talking = false;
   let finished = false;
+  let reply: string | null = null;
   const seen = new Set<string>();
 
   const handleLine = (line: string): void => {
@@ -138,9 +170,7 @@ export async function lookupViaClaudeCode(input: LookupInput, onEvent: (e: Agent
       for (const mm of final.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g)) {
         if (!seen.has(mm[2])) { seen.add(mm[2]); onEvent({ type: 'source', url: mm[2], title: mm[1] }); }
       }
-      const m = MOOD_RE.exec(final);
-      const mood: Mood = (m?.[1]?.toLowerCase() as Mood) ?? 'neutral';
-      onEvent({ type: 'done', mood, text: final.replace(MOOD_RE, '').trim() });
+      reply = final;
     }
   };
 
@@ -169,6 +199,7 @@ export async function lookupViaClaudeCode(input: LookupInput, onEvent: (e: Agent
       resolve();
     });
   }).finally(() => rm(dir, { recursive: true, force: true }));
+  return reply;
 }
 
 function friendly(cliMessage: string): string {

@@ -2,7 +2,7 @@
 
     blender -b --factory-startup -P pipeline/decimate.py -- \
         --input .../output/<name>/blender/character.glb --out build/mixamo/clippet_lowpoly.fbx \
-        [--target-tris 15000] [--voxel 0.006] [--bake-size 2048] [--glb assets/placeholder.glb]
+        [--target-tris 15000] [--voxel 0.006] [--bake-size 2048] [--glb build/mixamo/character_lowpoly.glb]
         [--no-remesh]
 
 Default path (what Mixamo and skinning want): voxel-remesh the 800k-triangle LKF output into
@@ -12,7 +12,7 @@ the triangles are uniform and there are no overlapping shells. --no-remesh keeps
 behaviour: straight collapse of the original mesh (fast, fragmented, keeps the original UVs).
 
 Writes the FBX (textures embedded and copied next to it), a JSON report, and with --glb a
-GLB of the same mesh (a good `assets/placeholder.glb`). Never touches the input file.
+GLB of the same mesh (loadable in Omni Support before rigging). Never touches the input file.
 """
 
 from __future__ import annotations

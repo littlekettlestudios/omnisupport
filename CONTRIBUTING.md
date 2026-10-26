@@ -1,8 +1,8 @@
-# Contributing to Clippet
+# Contributing to Omni Support
 
 ## Commit messages
 
-Clippet follows [Conventional Commits 1.0](https://www.conventionalcommits.org/en/v1.0.0/).
+Omni Support follows [Conventional Commits 1.0](https://www.conventionalcommits.org/en/v1.0.0/).
 A `commit-msg` hook in `.githooks/` rejects headers that don't match. Enable it once per clone:
 
 ```bash
@@ -33,7 +33,7 @@ git config commit.template .gitmessage
 | `perf`     | A change that makes something faster or lighter                 |
 | `refactor` | Restructuring with no behaviour change                          |
 | `test`     | Adding or fixing tests only                                     |
-| `docs`     | README, `PLAN.md`, `docs/`, comments                            |
+| `docs`     | README, `docs/`, comments                                       |
 | `build`    | Packaging, `package.json`, lockfile, electron-vite config       |
 | `ci`       | CI workflows                                                    |
 | `chore`    | Housekeeping that fits nowhere else (`.gitignore`, repo config) |
@@ -48,6 +48,9 @@ git config commit.template .gitmessage
 | `companion`  | Character renderer (`src/renderer/companion/`)               |
 | `bubble`     | Speech bubble window                                         |
 | `picker`     | Region picker overlay                                        |
+| `panel`      | Chat / Memory / Settings / Setup window                      |
+| `chat`       | The shared conversation and the system prompt                |
+| `memory`     | Long-term memory notes (`memory.json`)                       |
 | `preload`    | Preload bridges                                              |
 | `shared`     | Types and protocol shared across processes (`src/shared/`)   |
 | `agent`      | Lookup flow and the Claude agent loop                        |

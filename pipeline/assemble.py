@@ -1,7 +1,7 @@
-"""Assemble the rigged Clippet GLB with animation clips. Runs inside Blender:
+"""Assemble the rigged character GLB with animation clips. Runs inside Blender:
 
     blender -b --factory-startup -P pipeline/assemble.py -- \
-        --rigged build/mixamo/clippet_rigged.fbx --clips build/mixamo/clips --out assets/clippet.glb \
+        --rigged build/mixamo/character_rigged.fbx --clips build/mixamo/clips --out build/character.glb \
         [--height 1.0]
 
 --rigged  Mixamo "With Skin" FBX of the character.

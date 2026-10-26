@@ -12,6 +12,8 @@ export class BubbleWindow {
   private onClose: (() => void) | null = null;
   private onAction: ((id: BubbleActionId) => void) | null = null;
   private anchor = { x: 0, y: 0 };
+  /** The Chat conversation this bubble is showing, so only its events reach it. */
+  conversationId: string | null = null;
 
   private ensure(): BrowserWindow {
     if (this.win && !this.win.isDestroyed()) return this.win;
@@ -60,6 +62,7 @@ export class BubbleWindow {
     handlers: { onSubmit?: (note: string) => void; onClose?: () => void; onAction?: (id: BubbleActionId) => void },
   ): void {
     this.anchor = anchor;
+    this.conversationId = null;
     this.onSubmit = handlers.onSubmit ?? null;
     this.onClose = handlers.onClose ?? null;
     this.onAction = handlers.onAction ?? null;
@@ -68,7 +71,7 @@ export class BubbleWindow {
       win.webContents.send(BUBBLE_IPC.show, payload);
       this.place(200);
       win.show();
-      if (payload.kind === 'lookup') win.focus();
+      if (payload.kind !== 'card') win.focus();
     };
     if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send);
     else send();

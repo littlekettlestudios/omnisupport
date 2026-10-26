@@ -5,18 +5,20 @@ export interface ScreenRect { x: number; y: number; w: number; h: number }
 export type AgentStatus = 'thinking' | 'searching' | 'reading' | 'talking';
 export type Mood = 'happy' | 'neutral' | 'sorry';
 
-export type BubbleActionId = 'open-terminal' | 'check-again' | 'dismiss';
+export type BubbleActionId = 'open-terminal' | 'check-again' | 'dismiss' | 'open-chat' | 'open-setup';
 export interface BubbleAction { id: BubbleActionId; label: string; primary?: boolean }
 
 export type AgentEvent =
   | { type: 'status'; status: AgentStatus }
   | { type: 'delta'; text: string }
   | { type: 'source'; url: string; title: string }
-  | { type: 'done'; mood: Mood; text: string }
+  | { type: 'done'; mood: Mood; text: string; remembered?: string[]; renamed?: string }
   | { type: 'error'; message: string; actions?: BubbleAction[] };
 
 export type BubbleShow =
-  | { kind: 'lookup'; thumbnail: string; rect: ScreenRect }
+  | { kind: 'lookup'; name: string; thumbnail: string; rect: ScreenRect }
+  /** Text-only chat, opened by clicking the character. */
+  | { kind: 'chat'; name: string }
   | { kind: 'card'; title: string; message: string; actions: BubbleAction[]; tone?: 'info' | 'success' };
 
 export interface BubbleBridge {

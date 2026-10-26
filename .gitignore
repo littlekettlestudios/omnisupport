@@ -1,9 +1,28 @@
+# Dependencies and build output
 node_modules/
 out/
 dist/
-.DS_Store
-*.log
+release/
+*.tsbuildinfo
+
+# Local working folders: source art, Blender intermediates, private notes
+input/
+build/
+*.blend
+*.blend1
+*.fbx
+
+# Secrets
 .env
 .env.*
-build/
-input/
+!.env.example
+
+# Editor and OS clutter
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.log
+
+# Local Claude Code settings
+.claude/settings.local.json

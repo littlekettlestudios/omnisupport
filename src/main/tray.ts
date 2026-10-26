@@ -3,42 +3,44 @@ import { join } from 'node:path';
 
 export interface TrayActions {
   lookAtSomething(): void;
+  openChat(): void;
+  openSettings(): void;
+  openSetup(): void;
   toggleVisible(): void;
   toggleSleep(): void;
-  chooseModel(): void;
-  resetModel(): void;
-  setup(): void;
+  toggleSprites(): void;
   isVisible(): boolean;
   isSleeping(): boolean;
-  hasCustomModel(): boolean;
-  toggleSprites(): void;
   isSprites(): boolean;
-  shortcutLabel: string;
+  name(): string;
+  shortcutLabel(): string;
 }
 
-export function createTray(actions: TrayActions): Tray {
+/** Menu-bar icon. Call the returned rebuild after the name or shortcut changes. */
+export function createTray(actions: TrayActions): { tray: Tray; rebuild: () => void } {
   const icon = nativeImage.createFromPath(join(app.getAppPath(), 'resources', 'trayTemplate.png'));
   icon.setTemplateImage(true);
   const tray = new Tray(icon);
-  tray.setToolTip('Clippet');
 
   const rebuild = (): void => {
+    const name = actions.name();
+    tray.setToolTip(name);
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: `Look at something…  (${actions.shortcutLabel})`, click: () => actions.lookAtSomething() },
+        { label: `Look at something…  (${actions.shortcutLabel()})`, click: () => actions.lookAtSomething() },
+        { label: `Chat with ${name}…`, click: () => actions.openChat() },
         { type: 'separator' },
-        { label: actions.isVisible() ? 'Hide Clippet' : 'Show Clippet', click: () => { actions.toggleVisible(); rebuild(); } },
+        { label: actions.isVisible() ? `Hide ${name}` : `Show ${name}`, click: () => { actions.toggleVisible(); rebuild(); } },
         { label: actions.isSleeping() ? 'Wake up' : 'Do not disturb', click: () => { actions.toggleSleep(); rebuild(); } },
-        { type: 'separator' },
         { label: 'Pixel sprites (2D)', type: 'checkbox', checked: actions.isSprites(), click: () => { actions.toggleSprites(); rebuild(); } },
-        { label: 'Use your own model (GLB)…', click: () => { actions.chooseModel(); rebuild(); } },
-        { label: 'Use the default model', enabled: actions.hasCustomModel(), click: () => { actions.resetModel(); rebuild(); } },
-        { label: 'Sign-in check…', click: () => actions.setup() },
         { type: 'separator' },
-        { label: 'Quit Clippet', role: 'quit' },
+        { label: 'Settings…', accelerator: 'CommandOrControl+,', click: () => actions.openSettings() },
+        { label: 'Setup…', click: () => actions.openSetup() },
+        { type: 'separator' },
+        { label: `Quit ${name}`, role: 'quit' },
       ]),
     );
   };
   rebuild();
-  return tray;
+  return { tray, rebuild };
 }

@@ -1,6 +1,6 @@
-// Placeholder companion renderer. Codex replaces this file with the real renderer; the
-// protocol handling (hover → click-through, drag, moveTo, states, reactions, idle frame
-// rate) and the clip mapping below are the parts to keep.
+// 3D companion renderer: loads the GLB, plays its clips by state and reaction, and falls
+// back to a procedural stand-in when the model has no rig or fails to load. It also owns
+// hover hit-testing (which keeps the window click-through), drag, moveTo and lookAt.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Command, CompanionState, ReactionClip } from '@shared/protocol';
@@ -161,8 +161,10 @@ async function loadModel(url: string): Promise<{ hasRig: boolean; clips: string[
     const gltf = await new GLTFLoader().loadAsync(url);
     body.clear();
     gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    body.add(gltf.scene);
+    // Measure before parenting: once under `body` the box would be in scaled pixels, and a
+    // reload (work area change) would grow the hit capsule over the whole screen.
     const box = new THREE.Box3().setFromObject(gltf.scene);
+    body.add(gltf.scene);
     const size = box.getSize(new THREE.Vector3());
     hitVolume = new THREE.Mesh(
       new THREE.CapsuleGeometry(Math.max(size.x, size.z) * 0.6, Math.max(0, size.y - size.x), 4, 8),
