@@ -31,7 +31,9 @@ export type Command =
   | { type: 'react'; clip: ReactionClip }
   | { type: 'setVisible'; visible: boolean }
   | { type: 'setScale'; scale: number }
-  | { type: 'reload'; modelUrl: string };
+  | { type: 'reload'; modelUrl: string }
+  /** Cursor position polled by main, so hover works even when macOS stops forwarding moves. */
+  | { type: 'cursor'; x: number; y: number };
 
 export type RendererEvent =
   | { type: 'ready'; hasRig: boolean; clips: string[] }

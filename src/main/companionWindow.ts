@@ -62,6 +62,7 @@ export class CompanionWindow {
     });
     win.once('ready-to-show', () => win.show());
     screen.on('display-metrics-changed', () => this.fitToWorkArea(win));
+    this.pollCursor(win);
 
     if (process.env['ELECTRON_RENDERER_URL']) {
       void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/companion/index.html`);
@@ -150,6 +151,24 @@ export class CompanionWindow {
         break;
     }
     for (const fn of this.listeners) fn(event);
+  }
+
+  /**
+   * Forwarded mouse moves to a click-through window can stop arriving on macOS, which
+   * leaves the character unclickable. Poll the cursor and let the renderer hit-test it.
+   */
+  private pollCursor(win: BrowserWindow): void {
+    let last = '';
+    const timer = setInterval(() => {
+      if (win.isDestroyed()) { clearInterval(timer); return; }
+      if (!win.isVisible()) return;
+      const p = this.toCanvas(screen.getCursorScreenPoint());
+      const key = `${p.x},${p.y}`;
+      if (key === last) return;
+      last = key;
+      win.webContents.send(IPC.command, { type: 'cursor', x: p.x, y: p.y } satisfies Command);
+    }, 50);
+    win.on('closed', () => clearInterval(timer));
   }
 
   private fitToWorkArea(win: BrowserWindow): void {

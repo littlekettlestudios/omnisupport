@@ -245,10 +245,20 @@ let over = false;
 let leaveTimer: number | null = null;
 let drag: { start: THREE.Vector2; moved: boolean; offset: THREE.Vector2 } | null = null;
 
-function hitTest(e: PointerEvent): boolean {
-  ndc.set((e.clientX / width) * 2 - 1, -(e.clientY / height) * 2 + 1);
+function hitAt(x: number, y: number): boolean {
+  if (!visible || !hitVolume) return false;
+  ndc.set((x / width) * 2 - 1, -(y / height) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  return hitVolume ? raycaster.intersectObject(hitVolume, false).length > 0 : false;
+  return raycaster.intersectObject(hitVolume, false).length > 0;
+}
+
+function hitTest(e: PointerEvent): boolean {
+  return hitAt(e.clientX, e.clientY);
+}
+
+function hoverAt(x: number, y: number): void {
+  if (hitAt(x, y)) { if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; } setOver(true); }
+  else if (over) scheduleLeave();
 }
 
 let pointerDown = false;
@@ -277,10 +287,11 @@ window.addEventListener('pointermove', (e) => {
     move = null;
     return;
   }
-  const hit = hitTest(e);
-  if (hit) { if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; } setOver(true); }
-  else if (over) scheduleLeave();
+  hoverAt(e.clientX, e.clientY);
 });
+// Main's polled cursor: keeps hover working when macOS stops forwarding moves to a
+// click-through window. While dragging, real pointer events are in charge.
+bridge.onCommand((cmd) => { if (cmd.type === 'cursor' && !drag) hoverAt(cmd.x, cmd.y); });
 window.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || !hitTest(e)) return;
   pointerDown = true;

@@ -50,7 +50,8 @@ type Command =
   | { type: 'react'; clip: ReactionClip }                     // one-shot, returns to current state
   | { type: 'setVisible'; visible: boolean }
   | { type: 'setScale'; scale: number }
-  | { type: 'reload'; modelUrl: string };
+  | { type: 'reload'; modelUrl: string }
+  | { type: 'cursor'; x: number; y: number };                 // polled pointer position, see hover
 
 type CompanionState =
   | 'idle'        // default loop
@@ -89,8 +90,14 @@ type RendererEvent =
 
 `hover` is the important one. Main calls `setIgnoreMouseEvents(!over, {forward: true})`
 on it, so the window is click-through everywhere except on the character. Hit-test against
-an inflated capsule around the body, debounce leave by ~80 ms, and send `hover` only on
+an inflated capsule around the body, debounce leave by ~120 ms, and send `hover` only on
 change. If this stops firing, the user cannot click or drag the character.
+
+Do not rely on forwarded `pointermove` alone: macOS can stop forwarding moves to a
+click-through window partway through a session. Main polls the cursor (~20 Hz, only on
+change) and sends it as `cursor` in canvas pixels, possibly outside the canvas when the
+pointer is on another display. Hit-test those exactly like a `pointermove`, and treat
+anything while hidden (`setVisible false`) as a miss.
 
 `dragEnd` makes the dropped point the new `home`. Main persists it.
 
