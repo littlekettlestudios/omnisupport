@@ -107,6 +107,7 @@ change. If this stops firing, the user cannot click or drag the character.
 | `talking` | state talking (fallback: idle + small nod cycle) |
 | `sleeping` | state sleeping (fallback: idle at half speed, head down) |
 | `walk` | moveTo travel |
+| `run` | not used by the renderer yet (LKF pixel sprite sheets) |
 | `wave`, `point`, `happy`, `sorry`, `excited`, `nod` | reactions |
 
 Bone names follow Mixamo (`mixamorig:Head`, `mixamorig:Neck`, `mixamorig:Spine1`), which

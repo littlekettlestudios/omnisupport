@@ -551,6 +551,17 @@ def clip_walk(p: Poser, t: float, s: float) -> None:
     p.hips_up(0.012 * abs(S(t * TAU * 2)) - 0.006)
 
 
+def clip_run(p: Poser, t: float, s: float) -> None:
+    # Walk pushed further: longer stride, high knee lift on the recovery leg, arms pumping
+    # with bent elbows, body leaning into it, and a bigger bounce for the flight phase.
+    a = S(t * TAU)
+    p.rot("LeftUpLeg", x=-44 * a); p.rot("RightUpLeg", x=44 * a)
+    p.rot("LeftLeg", x=12 + max(0, 75 * S(t * TAU + 0.7))); p.rot("RightLeg", x=12 + max(0, 75 * S(t * TAU + math.pi + 0.7)))
+    p.raise_arm("Left", fwd=-38 * a, out=6, elbow=85); p.raise_arm("Right", fwd=38 * a, out=6, elbow=85)
+    p.rot("Spine", x=9, z=6 * a); p.rot("Head", x=-7, z=-5 * a)
+    p.hips_up(0.03 * abs(S(t * TAU * 2)) - 0.018)
+
+
 def clip_wave(p: Poser, t: float, s: float) -> None:
     # Reference: a real wave is forward-and-up with a bent elbow, the forearm near vertical
     # beside the head, and the hand swinging side to side. Not a lateral raise.
@@ -581,11 +592,12 @@ def clip_happy(p: Poser, t: float, s: float) -> None:
 
 
 def clip_sorry(p: Poser, t: float, s: float) -> None:
-    # Reference: head bowed, shoulders slumped, arms hanging a little forward.
+    # Reference: head bowed, shoulders slumped, arms hanging a little forward. The bow stays
+    # shallow enough that the sad face on the screen still shows from a raised camera.
     d = pulse(t, 0, 0.3) * (1 - pulse(t, 0.8, 1))
-    p.rot("Head", x=32 * d, z=6 * d); p.rot("Neck", x=8 * d); p.rot("Spine1", x=12 * d); p.rot("Spine2", x=8 * d)
+    p.rot("Head", x=8 * d, z=8 * d); p.rot("Neck", x=2 * d); p.rot("Spine1", x=3 * d); p.rot("Spine2", x=1 * d)
     p.raise_arm("Left", fwd=14 * d, out=-6 * d, elbow=8 * d); p.raise_arm("Right", fwd=14 * d, out=-6 * d, elbow=8 * d)
-    p.rot("LeftShoulder", x=6 * d); p.rot("RightShoulder", x=6 * d)
+    p.rot("LeftShoulder", x=10 * d); p.rot("RightShoulder", x=10 * d)
     p.breathe(t, 0.5)
 
 
@@ -605,7 +617,7 @@ def clip_nod(p: Poser, t: float, s: float) -> None:
 CLIPS = [
     ("idle", 3.0, clip_idle), ("attentive", 2.5, clip_attentive), ("thinking", 3.0, clip_thinking),
     ("searching", 3.0, clip_searching), ("talking", 2.0, clip_talking), ("sleeping", 4.0, clip_sleeping),
-    ("walk", 0.8, clip_walk), ("wave", 1.6, clip_wave), ("point", 1.4, clip_point), ("happy", 1.2, clip_happy),
+    ("walk", 0.8, clip_walk), ("run", 0.5, clip_run), ("wave", 1.6, clip_wave), ("point", 1.4, clip_point), ("happy", 1.2, clip_happy),
     ("sorry", 1.8, clip_sorry), ("excited", 1.4, clip_excited), ("nod", 1.0, clip_nod),
 ]
 
