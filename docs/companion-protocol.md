@@ -142,9 +142,10 @@ one. Models without `FaceScreen` ignore all of this.
 ## Sprite mode (2D)
 
 With `config.spritesUrl` set (Settings → Look → **2D sprites**, settings `"sprites": true`),
-`entry.ts` loads `sprites.ts` instead of the 3D renderer. It plays a sprite pack: by default
-the pixel sheets in `assets/sprites/omni3/` (rendered from `omni3.glb`), or the pack chosen
-with **Choose sprite pack…** (settings `"spritePack"`). A pack is a folder with `atlas.json`
+`entry.ts` loads `sprites.ts` instead of the 3D renderer; it is the default look. It plays a
+sprite pack: by default the painted Data Monster in `assets/sprites/data-monster/`, or the
+pack chosen with **Choose sprite pack…** (settings `"spritePack"`). The pixel sheets in
+`assets/sprites/omni3/` (rendered from `omni3.glb`) are the fallback and can be chosen too. A pack is a folder with `atlas.json`
 and the sheets it names. It plays under the same commands and events:
 
 | protocol | sheet |

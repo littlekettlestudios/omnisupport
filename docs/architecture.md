@@ -92,7 +92,10 @@ data folder from the project's working name (`Clippet`) is copied over once.
 
 ## Character assets
 
-`assets/omni3.glb` is the bundled character: 1 m tall, Mixamo bone names, and the protocol
-clips plus `run`, `jump`, `land`, `climb`, `success` and `failure`. `assets/sprites/omni3/`
-holds pixel sheets rendered from it in 8 directions, described by `atlas.json`. The Blender
+The default character is the Data Monster sprite pack in `assets/sprites/data-monster/`:
+painted frames facing front, left and right, built from `source/sheet.png` and
+`source/layout.json` by `scripts/make_sprite_pack.py` (the `source/` folder is left out of
+the packaged app). `assets/omni3.glb` is the 3D character: 1 m tall, Mixamo bone names, and
+the protocol clips plus `run`, `jump`, `land`, `climb`, `success` and `failure`.
+`assets/sprites/omni3/` holds pixel sheets rendered from it in 8 directions. The Blender
 scripts that made and rigged it are in `pipeline/`.
