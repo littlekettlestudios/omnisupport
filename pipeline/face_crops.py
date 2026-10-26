@@ -1,8 +1,8 @@
 """Cut face-screen textures out of the reference renders. Runs inside Blender (numpy):
 
     blender -b --factory-startup -P pipeline/face_crops.py -- \
-        --out assets/face idle=assets/chibi-ai-poses/idle-a-pose.png happy=assets/chibi-ai-poses/happy-success.png \
-        thinking=assets/chibi-ai-poses/thinking.png sorry=assets/chibi-ai-poses/sad-task-failed.png
+        --out build/face idle=input/poses/idle.png happy=input/poses/happy.png \
+        thinking=input/poses/thinking.png sorry=input/poses/sorry.png
 
 For each image: find the dark screen in the upper part of the picture, crop it with a
 margin, keep only the glowing features (transparent elsewhere), shrink them a little toward the\ncentre, and save a 512x384 PNG. The renderer puts these on the FaceScreen
