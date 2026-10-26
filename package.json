@@ -3,6 +3,12 @@
   "productName": "Clippet",
   "version": "0.0.1",
   "description": "A desktop companion that looks at what you point it to and finds answers",
+  "license": "MIT",
+  "author": "Little Kettle Studios",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/littlekettlestudios/omnisupport.git"
+  },
   "private": true,
   "main": "./out/main/index.js",
   "type": "module",

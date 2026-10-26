@@ -1,0 +1,25 @@
+#!/bin/sh
+# Reject commit headers that aren't Conventional Commits (see CONTRIBUTING.md).
+
+header=$(grep -v '^#' "$1" | sed '/^[[:space:]]*$/d' | head -n 1)
+
+# Let Git's own generated messages through.
+case "$header" in
+  "Merge "*|"Revert \""*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+esac
+
+types='feat|fix|perf|refactor|test|docs|build|ci|chore|style|revert'
+pattern="^($types)(\([a-z0-9][a-z0-9-]*\))?!?: [^A-Z].*[^.]$"
+
+if ! printf '%s\n' "$header" | grep -Eq "$pattern"; then
+  echo "commit-msg: header must follow Conventional Commits, e.g." >&2
+  echo "  feat(sprites): add landing dust to jump clips" >&2
+  echo "  types: $(printf '%s' "$types" | tr '|' ' ')" >&2
+  echo "got: $header" >&2
+  exit 1
+fi
+
+if [ "${#header}" -gt 72 ]; then
+  echo "commit-msg: header is ${#header} chars; keep it to 72 or fewer." >&2
+  exit 1
+fi

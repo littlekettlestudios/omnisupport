@@ -62,3 +62,12 @@ region picker once, 2.5 s after launch.
 
 Screen capture (M1) needs the Screen Recording permission for the app bundle. In
 development that is granted to "Electron" once; a packaged build needs a signed bundle.
+
+## Contributing
+
+Commits follow Conventional Commits; see [CONTRIBUTING.md](CONTRIBUTING.md) for the types,
+scopes and the `commit-msg` hook.
+
+## License
+
+[MIT](LICENSE) © Little Kettle Studios

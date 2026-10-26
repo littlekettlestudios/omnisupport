@@ -1,0 +1,10 @@
+# <type>(<scope>): <summary>   (max 72 chars, imperative, lowercase)
+#
+# Types:  feat fix perf refactor test docs build ci chore style revert
+# Scopes: main companion bubble picker preload shared agent backend capture
+#         tray onboarding settings rig sprites face pipeline assets config deps
+# Breaking change: add ! before the colon and a BREAKING CHANGE: footer.
+#
+# Body: what changed and why (wrap at 72).
+#
+# Footer: BREAKING CHANGE: ..., Refs: #123
