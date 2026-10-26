@@ -309,7 +309,7 @@ function apply(s: PanelState): void {
   $<HTMLInputElement>('dock').checked = st.dock;
   $('model-label').textContent = s.customModel ? 'Using your own GLB.' : 'Using the bundled omni3 robot.';
   $<HTMLButtonElement>('model-reset').disabled = !s.customModel;
-  $('sprites-label').textContent = s.customSprites ? 'Using your own sprite pack.' : 'Using the bundled omni3 pixel sprites.';
+  $('sprites-label').textContent = s.customSprites ? 'Using your own sprite pack.' : 'Using the bundled Data Monster.';
   $<HTMLButtonElement>('sprites-reset').disabled = !s.customSprites;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name=backend]')) r.checked = r.value === st.backend;
   $('row-model').style.display = st.backend === 'claude-code' ? '' : 'none';

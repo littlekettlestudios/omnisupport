@@ -1,0 +1,12 @@
+{
+  "sheet": "sheet.png",
+  "columns": 8,
+  "rows": 5,
+  "clips": {
+    "idle": { "row": 0, "loop": true, "durations_ms": [700, 500, 500, 90, 110, 500, 600, 700] },
+    "walk": { "rows": { "W": 1, "E": 2 }, "loop": true, "fps": 10, "stabilize": true, "ground_speed_m_s": 0.35 },
+    "thinking": { "row": 3, "loop": true, "durations_ms": [300, 300, 400, 400, 400, 500, 400, 300] },
+    "success": { "row": 4, "columns": [0, 1, 2, 3], "loop": false, "durations_ms": [120, 160, 200, 450] },
+    "failure": { "row": 4, "columns": [4, 5, 6, 7], "loop": false, "durations_ms": [250, 350, 450, 700] }
+  }
+}

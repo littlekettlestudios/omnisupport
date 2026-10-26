@@ -23,7 +23,7 @@ export interface Settings {
   modelUrl: string | null;
   /** Draw the character from a 2D sprite pack instead of the 3D model. */
   sprites: boolean;
-  /** file:// URL of a user-chosen sprite pack's atlas.json; null = the bundled assets/sprites/omni3. */
+  /** file:// URL of a user-chosen sprite pack's atlas.json; null = the bundled assets/sprites/data-monster. */
   spritePack: string | null;
   /** Let the helper keep notes about the user across conversations (memory.json). */
   memory: boolean;
@@ -47,7 +47,7 @@ const RETIRED_NAMES = new Set(['Clippet']);
 
 const DEFAULTS: Settings = {
   name: DEFAULT_NAME, home: null, scale: DEFAULT_SCALE, shortcut: DEFAULT_SHORTCUT, apiKey: null, webSearch: true,
-  backend: 'claude-code', claudeModel: 'sonnet', claudePath: null, modelUrl: null, sprites: false, spritePack: null,
+  backend: 'claude-code', claudeModel: 'sonnet', claudePath: null, modelUrl: null, sprites: true, spritePack: null,
   memory: true, welcomed: false, dock: true,
 };
 

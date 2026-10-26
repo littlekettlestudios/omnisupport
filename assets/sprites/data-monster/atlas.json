@@ -1,0 +1,130 @@
+{
+ "pixels_per_metre": 162.0,
+ "pixel_art": false,
+ "facings": [
+  "E",
+  "S",
+  "W"
+ ],
+ "clips": {
+  "idle": {
+   "sheet": "sheet_idle.png",
+   "frames": 8,
+   "frame_w": 200,
+   "frame_h": 228,
+   "loop": true,
+   "durations_ms": [
+    700,
+    500,
+    500,
+    90,
+    110,
+    500,
+    600,
+    700
+   ],
+   "emote": null,
+   "origin": [
+    102.1,
+    206
+   ],
+   "rows": {
+    "S": 0
+   }
+  },
+  "walk": {
+   "sheet": "sheet_walk.png",
+   "frames": 8,
+   "frame_w": 200,
+   "frame_h": 228,
+   "loop": true,
+   "durations_ms": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100
+   ],
+   "emote": null,
+   "origin": [
+    96.0,
+    202
+   ],
+   "rows": {
+    "W": 0,
+    "E": 1
+   },
+   "ground_speed_px_s": 56.7
+  },
+  "thinking": {
+   "sheet": "sheet_thinking.png",
+   "frames": 8,
+   "frame_w": 200,
+   "frame_h": 228,
+   "loop": true,
+   "durations_ms": [
+    300,
+    300,
+    400,
+    400,
+    400,
+    500,
+    400,
+    300
+   ],
+   "emote": null,
+   "origin": [
+    98.6,
+    195
+   ],
+   "rows": {
+    "S": 0
+   }
+  },
+  "success": {
+   "sheet": "sheet_success.png",
+   "frames": 4,
+   "frame_w": 200,
+   "frame_h": 228,
+   "loop": false,
+   "durations_ms": [
+    120,
+    160,
+    200,
+    450
+   ],
+   "emote": null,
+   "origin": [
+    101.2,
+    189
+   ],
+   "rows": {
+    "S": 0
+   }
+  },
+  "failure": {
+   "sheet": "sheet_failure.png",
+   "frames": 4,
+   "frame_w": 200,
+   "frame_h": 228,
+   "loop": false,
+   "durations_ms": [
+    250,
+    350,
+    450,
+    700
+   ],
+   "emote": null,
+   "origin": [
+    97.9,
+    193
+   ],
+   "rows": {
+    "S": 0
+   }
+  }
+ }
+}
