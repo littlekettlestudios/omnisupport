@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CompanionWindow } from './companionWindow';
 import { BubbleWindow } from './bubbleWindow';
+import { Chat } from './chat';
 import { LookupFlow } from './lookupFlow';
 import { Onboarding } from './onboarding';
 import { createTray } from './tray';
@@ -17,10 +18,15 @@ if (!gotLock) app.quit();
 
 const companion = new CompanionWindow();
 const bubble = new BubbleWindow();
-const flow = new LookupFlow(companion, bubble);
+const chat = new Chat(companion);
+const flow = new LookupFlow(companion, bubble, chat);
 const onboarding = new Onboarding(companion, bubble);
 let visible = true;
 let sleeping = false;
+
+chat.on((e) => {
+  if (e.type !== 'turn' && e.type !== 'new' && bubble.visible && bubble.conversationId === e.conversationId) bubble.agent(e);
+});
 
 app.whenReady().then(() => {
   const settings = loadSettings();
@@ -33,7 +39,10 @@ app.whenReady().then(() => {
     }
     if (e.type === 'click') {
       if (process.env['CLIPPET_DEBUG']) console.log('[clippet] click on character');
-      if (!bubble.visible) companion.send({ type: 'react', clip: 'wave' });
+      if (!bubble.visible) {
+        companion.send({ type: 'react', clip: 'wave' });
+        flow.openChat();
+      }
     }
     if (e.type === 'dragEnd' && process.env['CLIPPET_DEBUG']) console.log('[clippet] dragged to', e.x, e.y);
   });

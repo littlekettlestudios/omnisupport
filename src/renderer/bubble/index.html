@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Clippet bubble</title>
+    <title>Omni bubble</title>
     <style>
       :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --accent: #ff9f0a; }
       @media (prefers-color-scheme: dark) { :root { --bg: #2c2c2e; --fg: #f5f5f7; --muted: #a1a1a6; --line: #3a3a3c; } }
@@ -13,8 +13,8 @@
       header .title { font-weight: 600; flex: 1; }
       #close { border: 0; background: var(--line); color: var(--muted); width: 22px; height: 22px; border-radius: 11px; cursor: pointer; font-size: 13px; line-height: 22px; padding: 0; }
       #thumb { display: block; width: 100%; max-height: 110px; object-fit: contain; object-position: left; border-radius: 8px; background: var(--line); margin-bottom: 8px; }
-      #note { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; color: inherit; background: transparent; outline: none; resize: none; }
-      #note:focus { border-color: var(--accent); }
+      #note, #reply { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; color: inherit; background: transparent; outline: none; resize: none; }
+      #note:focus, #reply:focus { border-color: var(--accent); }
       #status { color: var(--muted); font-size: 13px; margin-top: 8px; display: none; }
       #status::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 4px; background: var(--accent); margin-right: 6px; animation: pulse 1s infinite; }
       @keyframes pulse { 50% { opacity: 0.3; } }
@@ -33,20 +33,29 @@
       #actions button { font: inherit; font-weight: 600; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; }
       #actions button.primary { background: var(--accent); border-color: var(--accent); color: #1d1d1f; }
       #answer a { color: var(--accent); text-decoration: none; } #answer a:hover { text-decoration: underline; }
+      #you { display: none; margin-top: 8px; padding: 6px 10px; border-radius: 10px; background: var(--line); font-size: 13px; white-space: pre-wrap; }
+      #memo { display: none; margin-top: 8px; color: var(--muted); font-size: 12px; }
+      #reply { display: none; margin-top: 10px; }
+      #footer { display: none; margin-top: 6px; justify-content: space-between; color: var(--muted); font-size: 12px; }
+      #footer a { color: var(--muted); text-decoration: none; cursor: pointer; } #footer a:hover { color: var(--accent); }
     </style>
   </head>
   <body>
     <div id="card">
       <header><span class="title">What's up with this?</span><button id="close" title="Close (Esc)">×</button></header>
-      <img id="thumb" alt="What Clippet sees" />
+      <img id="thumb" alt="What I see" />
       <textarea id="note" rows="2" placeholder="Add a note, or press Enter to just look"></textarea>
       <div class="hint" id="hint">Only this region is sent. Enter to send · Esc to close</div>
+      <div id="you"></div>
       <div id="status"></div>
       <div id="answer"></div>
       <div id="sources"></div>
       <div id="error"></div>
       <div id="message"></div>
       <div id="actions"></div>
+      <div id="memo"></div>
+      <textarea id="reply" rows="1" placeholder="Reply…"></textarea>
+      <div id="footer"><span>Enter to send · Esc to close</span><a id="open-chat">Open chat window</a></div>
     </div>
     <script type="module" src="./index.ts"></script>
   </body>

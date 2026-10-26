@@ -1,24 +1,23 @@
 import { nativeImage, screen } from 'electron';
 import type { CompanionWindow } from './companionWindow';
 import type { BubbleWindow } from './bubbleWindow';
+import type { Chat } from './chat';
 import { pickRegion } from './picker';
 import { captureRegion, CaptureError } from './capture';
-import { lookup } from './agent';
-import { lookupViaClaudeCode } from './claudeCode';
-import { loadSettings, settingsFile } from './settings';
-import type { ScreenRect } from '@shared/bubble';
+import { loadSettings } from './settings';
+import type { BubbleActionId, ScreenRect } from '@shared/bubble';
 
 /**
- * The whole "look at something" interaction: pick a region, capture it, walk the
- * character over, ask for a note, run the lookup, stream the answer into the bubble.
+ * The bubble interactions: "look at something" (pick a region, capture it, walk the
+ * character over, ask for a note) and "chat" (click the character). Either way the
+ * bubble's messages go to the shared Chat, and replies to its answers continue it.
  */
 export class LookupFlow {
   private busy = false;
-  private abort: AbortController | null = null;
-  /** Handles card actions (sign-in buttons) raised during a lookup. */
-  onAction: ((id: import('@shared/bubble').BubbleActionId) => void) | null = null;
+  /** Handles card actions (sign-in buttons, open chat) raised from the bubble. */
+  onAction: ((id: BubbleActionId) => void) | null = null;
 
-  constructor(private companion: CompanionWindow, private bubble: BubbleWindow) {}
+  constructor(private companion: CompanionWindow, private bubble: BubbleWindow, private chat: Chat) {}
 
   async start(): Promise<void> {
     if (this.busy) return;
@@ -48,9 +47,17 @@ export class LookupFlow {
       const settings = loadSettings();
       const head = this.companion.toScreen({ x: stand.x, y: stand.y - settings.scale * 0.9 });
 
-      this.bubble.show({ kind: 'lookup', thumbnail, rect }, head, {
+      // A new region starts a new conversation; replies in the bubble continue it.
+      let first = true;
+      this.bubble.show({ kind: 'lookup', name: settings.name, thumbnail, rect }, head, {
         onAction: (id) => this.onAction?.(id),
-        onSubmit: (note) => void this.run(png, note),
+        onSubmit: (text) => {
+          if (first) {
+            first = false;
+            this.bubble.conversationId = this.chat.newConversation();
+            void this.chat.send(text, png);
+          } else void this.chat.send(text);
+        },
         onClose: () => this.idle(),
       });
     } finally {
@@ -58,35 +65,20 @@ export class LookupFlow {
     }
   }
 
-  private async run(png: Buffer, note: string): Promise<void> {
-    this.abort?.abort();
-    this.abort = new AbortController();
+  /** Open the bubble as a plain chat box above the character. */
+  openChat(): void {
+    if (this.busy) return;
     const settings = loadSettings();
-    const apiKey = process.env['ANTHROPIC_API_KEY'] || settings.apiKey || undefined;
-    this.companion.send({ type: 'setState', state: 'thinking' });
-
-    let talking = false;
-    const onEvent = (ev: import('@shared/bubble').AgentEvent): void => {
-      this.bubble.agent(ev);
-      if (ev.type === 'status') {
-        if (ev.status === 'searching' || ev.status === 'reading') this.companion.send({ type: 'setState', state: 'searching' });
-        else if (ev.status === 'thinking') this.companion.send({ type: 'setState', state: 'thinking' });
-      }
-      if (ev.type === 'delta' && !talking) { talking = true; this.companion.send({ type: 'setState', state: 'talking' }); }
-      if (ev.type === 'done') {
-        this.companion.send({ type: 'react', clip: ev.mood === 'happy' ? 'happy' : ev.mood === 'sorry' ? 'sorry' : 'nod' });
-        this.companion.send({ type: 'setState', state: 'idle' });
-      }
-      if (ev.type === 'error') {
-        this.companion.send({ type: 'react', clip: 'sorry' });
-        this.companion.send({ type: 'setState', state: 'idle' });
-      }
-    };
-    if (settings.backend === 'api') {
-      await lookup({ imagePng: png, note }, onEvent, { apiKey, webSearch: settings.webSearch, signal: this.abort.signal, settingsPath: settingsFile() });
-    } else {
-      await lookupViaClaudeCode({ imagePng: png, note }, onEvent, { model: settings.claudeModel, claudePath: settings.claudePath ?? undefined, webSearch: settings.webSearch, signal: this.abort.signal });
-    }
+    const head = this.companion.toScreen({ x: this.companion.feet.x, y: this.companion.feet.y - settings.scale * 0.9 });
+    this.companion.send({ type: 'setState', state: 'attentive' });
+    this.bubble.show({ kind: 'chat', name: settings.name }, head, {
+      onAction: (id) => this.onAction?.(id),
+      onSubmit: (text) => {
+        this.bubble.conversationId = this.chat.resume();
+        void this.chat.send(text);
+      },
+      onClose: () => this.idle(),
+    });
   }
 
   private showError(rect: ScreenRect, message: string): void {
@@ -99,8 +91,9 @@ export class LookupFlow {
   }
 
   private idle(): void {
-    this.abort?.abort();
-    this.abort = null;
+    // Closing the bubble stops an answer still streaming into it.
+    if (this.bubble.conversationId && this.bubble.conversationId === this.chat.currentId) this.chat.stop();
+    this.bubble.conversationId = null;
     this.companion.send({ type: 'lookAt', x: null, y: null });
     this.companion.send({ type: 'setState', state: 'idle' });
   }

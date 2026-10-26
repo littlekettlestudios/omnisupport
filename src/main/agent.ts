@@ -1,60 +1,42 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AgentEvent, Mood } from '@shared/bubble';
+import type { AgentEvent } from '@shared/bubble';
+import { userText } from './prompt';
+import type { Turn } from './prompt';
 
 const MODEL = 'claude-opus-5-5';
 
-export const SYSTEM = `You are Clippet, a small, cheerful desktop companion. The user has selected a region of their screen and may have added a note. Help them with whatever that region shows: an error, a confusing setting, a product, a word, a message, a piece of code.
-
-How to answer:
-- First line: one sentence that says what this is or what is wrong. No preamble, do not describe the screenshot back.
-- Then, only if there is something to do: up to 5 numbered steps, each one short.
-- Under 150 words total. Plain words. No headings.
-- Use web_search when the region shows an error message, a product or version, a price, a date, or anything that may have changed recently. Prefer official docs and primary sources. Skip searching for things you already know well.
-- Never ask the user to paste passwords or keys.
-- On the very last line, alone, write [mood: happy] if you solved it, [mood: neutral] if you explained it, or [mood: sorry] if you could not help.`;
-
-export const MOOD_RE = /\s*\[mood:\s*(happy|neutral|sorry)\]\s*$/i;
-
-export interface LookupInput {
-  imagePng: Buffer;
-  note: string;
-  context?: string;
-}
-
-export interface LookupOptions {
+export interface ApiOptions {
   apiKey?: string;
   webSearch?: boolean;
   signal?: AbortSignal;
-  /** Shown in the no-key error so the user knows where to put one. */
-  settingsPath?: string;
 }
 
-/** One lookup: streams AgentEvents, resolves when done. Errors are delivered as events, not thrown. */
-export async function lookup(input: LookupInput, onEvent: (e: AgentEvent) => void, opts: LookupOptions = {}): Promise<void> {
-  const noKey = `No Anthropic API key found. Set ANTHROPIC_API_KEY in the environment Clippet is launched from, or add "apiKey" to ${opts.settingsPath ?? 'settings.json'}.`;
+function toMessages(turns: Turn[]): Anthropic.Beta.BetaMessageParam[] {
+  return turns.map((t): Anthropic.Beta.BetaMessageParam => {
+    if (t.role === 'assistant') return { role: 'assistant', content: t.text || '(no answer)' };
+    const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+    if (t.image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: t.image.toString('base64') } });
+    content.push({ type: 'text', text: userText(t) });
+    return { role: 'user', content };
+  });
+}
+
+/**
+ * One reply through the Anthropic API. Streams status, delta and source events and
+ * resolves with the full reply text (tags included), or null after an error event.
+ */
+export async function replyViaApi(turns: Turn[], system: string, onEvent: (e: AgentEvent) => void, opts: ApiOptions = {}): Promise<string | null> {
+  const noKey = 'No Anthropic API key found. Add one in Settings, or set ANTHROPIC_API_KEY in the environment Omni Support is launched from.';
   let client: Anthropic;
   try {
     client = new Anthropic(opts.apiKey ? { apiKey: opts.apiKey } : {});
   } catch {
-    onEvent({ type: 'error', message: noKey });
-    return;
+    onEvent({ type: 'error', message: noKey, actions: [{ id: 'open-setup', label: 'Open Settings', primary: true }] });
+    return null;
   }
-  const webSearch = opts.webSearch ?? true;
 
-  const userText = [
-    input.context ? `Context: ${input.context}` : null,
-    input.note.trim() ? `Note from the user: ${input.note.trim()}` : 'The user did not add a note. Work out what they most likely need from the region.',
-  ].filter(Boolean).join('\n');
-
-  const messages: Anthropic.Beta.BetaMessageParam[] = [{
-    role: 'user',
-    content: [
-      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: input.imagePng.toString('base64') } },
-      { type: 'text', text: userText },
-    ],
-  }];
-
-  const tools: Anthropic.Beta.BetaToolUnion[] = webSearch
+  const messages = toMessages(turns);
+  const tools: Anthropic.Beta.BetaToolUnion[] = opts.webSearch ?? true
     ? [
         { type: 'web_search_20260209', name: 'web_search', max_uses: 5 },
         { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 3 },
@@ -73,7 +55,7 @@ export async function lookup(input: LookupInput, onEvent: (e: AgentEvent) => voi
           max_tokens: 8000,
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
-          system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
           tools,
           messages,
         },
@@ -107,25 +89,20 @@ export async function lookup(input: LookupInput, onEvent: (e: AgentEvent) => voi
         continue;
       }
       if (message.stop_reason === 'refusal') {
-        onEvent({ type: 'error', message: "Clippet can't help with that one." });
-        return;
+        onEvent({ type: 'error', message: "Sorry, I can't help with that one." });
+        return null;
       }
       break;
     }
-    const m = MOOD_RE.exec(text);
-    const mood: Mood = (m?.[1]?.toLowerCase() as Mood) ?? 'neutral';
-    onEvent({ type: 'done', mood, text: text.replace(MOOD_RE, '').trim() });
+    return text;
   } catch (err) {
-    if (opts.signal?.aborted) return;
-    if (err instanceof Anthropic.AuthenticationError) onEvent({ type: 'error', message: `The Anthropic API key was rejected. ${noKey}` });
+    if (opts.signal?.aborted) return null;
+    const setup = [{ id: 'open-setup' as const, label: 'Open Settings', primary: true }];
+    if (err instanceof Anthropic.AuthenticationError) onEvent({ type: 'error', message: `The Anthropic API key was rejected. ${noKey}`, actions: setup });
     else if (err instanceof Anthropic.RateLimitError) onEvent({ type: 'error', message: 'Rate limited. Try again in a moment.' });
     else if (err instanceof Anthropic.APIConnectionError) onEvent({ type: 'error', message: 'Could not reach the API. Check your connection.' });
     else if (err instanceof Anthropic.APIError) onEvent({ type: 'error', message: `API error: ${err.message}` });
     else onEvent({ type: 'error', message: `Something went wrong: ${(err as Error).message}` });
+    return null;
   }
-}
-
-/** Strip the trailing mood tag from streamed text for display. */
-export function stripMood(s: string): string {
-  return s.replace(/\s*\[mood:[^\]]*\]?\s*$/i, '');
 }
