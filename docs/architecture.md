@@ -36,7 +36,8 @@ Omni Support is an Electron menu-bar app with four kinds of window and one conve
   click-through logic. It shows a region thumbnail and note box, a chat box, or a card
   (sign-in, errors), streams answers, and offers a reply box after each answer.
 - **Panel** (`src/renderer/panel/`): a normal window with Chat, Memory, Settings and Setup
-  tabs. The app shows a Dock icon only while it is open.
+  tabs. Clicking the Dock icon opens it. With **Show in Dock** off the app is menu-bar-only
+  and shows a Dock icon just while the panel is open.
 - **Picker** (`src/renderer/picker/`): a full-screen overlay that reports the dragged
   rectangle; main then captures exactly that rectangle with `screencapture -R`.
 

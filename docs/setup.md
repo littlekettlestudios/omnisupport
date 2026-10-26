@@ -24,14 +24,29 @@ Blender is only needed if you want to build your own character (see
 git clone https://github.com/littlekettlestudios/omnisupport.git
 cd omnisupport
 npm install
+npm run dist
+```
+
+`npm run dist` builds `release/mac-arm64/Omni Support.app` (`release/mac/` on Intel Macs).
+Drag it to **Applications** and open it. To keep it in the Dock, right-click its Dock icon
+→ **Options → Keep in Dock**. Clicking the Dock icon opens the chat window.
+
+The build is ad-hoc signed, not signed with an Apple Developer ID, so it is only meant for
+the Mac that built it. If you copy it to another Mac, macOS will refuse to open it until
+you right-click it and choose **Open**.
+
+To run straight from source instead (handy while developing):
+
+```bash
 npm run build && npx electron .
 ```
 
 If `npx electron .` says Electron failed to install, its binary download was skipped; run
 `node node_modules/electron/install.js` once and try again.
 
-The app has no Dock icon. Look for the helper in the bottom-right corner of your screen and
-the icon in the menu bar. Quit from the menu-bar icon.
+Look for the helper in the bottom-right corner of your screen, the icon in the Dock and the
+icon in the menu bar. Quit from either menu. If you'd rather have no Dock icon, turn off
+**Show in Dock** in Settings.
 
 ## 3. First launch
 
@@ -47,8 +62,9 @@ The helper waves and the **Setup** window opens:
      and paste your key. It's encrypted with your macOS Keychain before it's written to
      disk. `ANTHROPIC_API_KEY` in the environment you launch from takes precedence.
 3. **Screen Recording.** macOS asks the first time you point at something. If you said no,
-   click **Open System Settings**, turn on **Electron** (that's the app's name when run
-   from source) under *Privacy & Security → Screen Recording*, then quit and relaunch.
+   click **Open System Settings**, turn on **Omni Support** (or **Electron** when run from
+   source) under *Privacy & Security → Screen Recording*, then quit and relaunch. After
+   you rebuild the app, macOS may ask again because the ad-hoc signature changed.
 
 You can reopen this checklist from the menu bar: **Setup…**.
 
@@ -58,7 +74,7 @@ You can reopen this checklist from the menu bar: **Setup…**.
 |---|---|
 | Ask about something on screen | Press `⌃⌥Space`, drag a rectangle, type a note or press Enter |
 | Follow up on an answer | Type in the **Reply…** box under the answer |
-| Ask without a screenshot | Click the helper, or menu bar → **Chat with …** |
+| Ask without a screenshot | Click the helper or the Dock icon, or menu bar → **Chat with …** |
 | See the whole conversation | Click **Open chat window** in the bubble |
 | Start over | **New chat** in the chat window (a region you point at always starts a new one) |
 | Move the helper | Drag it; it remembers the spot |
@@ -69,13 +85,14 @@ still coming in.
 
 ## 5. Settings
 
-Menu bar → **Settings…** (or ⌘, while the window is open).
+Menu bar → **Settings…**, or ⌘, while the app is in front.
 
 | Setting | What it does |
 |---|---|
 | Name | What the helper calls itself. |
 | Size | Height in pixels (default 150). |
 | Pixel sprites (2D) | Draw the helper from the bundled pixel sheets instead of the 3D model. |
+| Show in Dock | Keep a Dock icon that opens the chat window. Off makes it a menu-bar-only app. |
 | 3D model | Load your own `.glb`. Rigged models should use the clip and bone names in [companion-protocol.md](companion-protocol.md); a static model gets procedural motion. **Use default** goes back to the bundled robot. |
 | Answer with | Claude Code (subscription) or Anthropic API (key). |
 | Claude Code model | Sonnet (default), Opus (deeper, uses more of your limits) or Haiku (fastest). |

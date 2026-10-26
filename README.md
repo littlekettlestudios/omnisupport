@@ -8,7 +8,7 @@ give it any name you like (it's called **Omni** until you do).
 
 Open source from [Little Kettle Studios](https://github.com/littlekettlestudios).
 
-> **Status: early.** macOS only, run from source. No signed builds yet.
+> **Status: early.** macOS only, built from source. No signed builds yet.
 
 ## What it does
 
@@ -41,10 +41,11 @@ Open source from [Little Kettle Studios](https://github.com/littlekettlestudios)
 git clone https://github.com/littlekettlestudios/omnisupport.git
 cd omnisupport
 npm install
-npm run build && npx electron .
+npm run dist     # builds release/mac-arm64/Omni Support.app
 ```
 
-On first launch the helper waves and the **Setup** window opens: name your helper, then
+Drag **Omni Support.app** into Applications, open it, and right-click its Dock icon →
+**Options → Keep in Dock** if you want it there. On first launch the helper waves and the **Setup** window opens: name your helper, then
 follow the checklist (Claude Code sign-in or API key, Screen Recording). After that:
 
 1. Press `⌃⌥Space`, drag over something, add a note or just press Enter.
@@ -60,8 +61,9 @@ The full walkthrough, including permissions and troubleshooting, is in
   login. Anthropic's terms let you use your own subscription this way, but shipping a
   product that routes other people's requests through their subscriptions needs
   Anthropic's approval. Use the API backend for anything you distribute.
-- **Running from source asks for Screen Recording for "Electron"**, not "Omni Support",
-  and macOS may ask again after Electron updates. A signed build fixes this (not done yet).
+- **The app is ad-hoc signed, not notarized.** It runs on the Mac that built it; macOS may
+  ask for Screen Recording again after each rebuild, and other Macs need right-click →
+  Open. (Running with `npx electron .` asks for "Electron" instead.)
 - **What leaves your Mac:** the region you select, your note, the conversation and your
   saved memory notes go to Anthropic (through Claude Code or the API) when you ask
   something, and web search may fetch pages. Nothing is sent in the background. See
@@ -89,7 +91,10 @@ The full walkthrough, including permissions and troubleshooting, is in
 npm run dev         # hot reload
 npm run typecheck
 npm run build
+npm run dist        # package Omni Support.app into release/
 ```
+
+The app icon is made from `resources/icon-art.jpg` by `scripts/make_icon.py` (needs Pillow).
 
 `CLIPPET_DEBUG=1` logs hover, click and drag events; `CLIPPET_DEBUG=flow` opens the region
 picker 2.5 s after launch; `CLIPPET_DEBUG=pose` cycles the character's states and
