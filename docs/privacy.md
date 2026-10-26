@@ -19,8 +19,10 @@ When you ask something, these go to Anthropic:
 
 With the **Claude Code** backend they go through your locally installed `claude` CLI under
 your own login; each request runs as a fresh, unsaved CLI session (`--no-session-persistence`)
-in a private temp folder that is deleted afterwards. Your `CLAUDE.md` files and Claude
-Code's own memory are not loaded. With the **API** backend they go straight to the
+in a private temp folder that is deleted afterwards. It can read only the screenshots in
+that folder (any other file read is denied, so text in a captured region can't make it open
+your files), and it ignores your `CLAUDE.md` files, Claude Code's own memory, and your Claude
+Code settings, hooks and plugins. With the **API** backend they go straight to the
 Anthropic API with your key.
 
 With **web search** on, Claude may search the web and fetch pages to answer. Turn it off in

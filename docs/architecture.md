@@ -59,8 +59,10 @@ then resolve with the full reply text.
 
 - **Claude Code** (`claudeCode.ts`, default): spawns `claude -p` with `--system-prompt`, only
   the `Read`, `WebSearch` and `WebFetch` tools, `--permission-mode dontAsk`,
-  `--no-session-persistence` and `stream-json` output, in a private temp folder that holds
-  the screenshots. Earlier turns are replayed in the prompt as a transcript, so nothing is
+  `--setting-sources project`, `--no-session-persistence` and `stream-json` output, in a
+  private temp folder that holds the screenshots. `Read` is pre-approved for that folder
+  only, so every other read is denied, and the user's own Claude Code settings are not
+  loaded, so they cannot widen that rule. Earlier turns are replayed in the prompt as a transcript, so nothing is
   saved in the user's Claude Code history. `ANTHROPIC_API_KEY` is removed from the child's
   environment so the subscription login is used.
 - **Anthropic API** (`agent.ts`): the Messages API with `claude-opus-5-5`, streaming, the

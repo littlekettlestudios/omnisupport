@@ -1,5 +1,5 @@
 import { spawn, execFile } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentEvent } from '@shared/bubble';
@@ -11,8 +11,9 @@ import type { Turn } from './prompt';
  * Lookup through the locally installed Claude Code CLI in headless mode (`claude -p`).
  * Runs on whatever login the CLI has (a Claude subscription, by default). The app never
  * reads or stores credentials; it only spawns the user's own CLI. Screenshots are
- * written to a private temp dir for the Read tool and deleted afterwards. Each reply is
- * a fresh, unsaved CLI session; earlier turns of the conversation go into the prompt.
+ * written to a private temp dir for the Read tool and deleted afterwards; Read may open
+ * nothing outside that dir. Each reply is a fresh, unsaved CLI session that ignores the
+ * user's own Claude Code settings; earlier turns of the conversation go into the prompt.
  */
 
 export interface ClaudeCodeOptions {
@@ -90,16 +91,25 @@ export async function replyViaClaudeCode(turns: Turn[], system: string, onEvent:
     return null;
   }
   const dir = await mkdtemp(join(tmpdir(), 'clippet-'));
-  const tools = opts.webSearch === false ? 'Read' : 'Read,WebSearch,WebFetch';
+  const tools = opts.webSearch === false ? ['Read'] : ['Read', 'WebSearch', 'WebFetch'];
+  // Pre-approve Read for the screenshot dir only; with dontAsk every other path is denied, so
+  // text in a captured region cannot get the model to open other files on the Mac. Rules
+  // match the resolved path (macOS temp dirs sit behind the /var -> /private/var symlink),
+  // and `//` marks an absolute path.
+  const readRule = `Read(/${await realpath(dir)}/**)`;
+  const allowed = tools.map((t) => (t === 'Read' ? readRule : t));
   const prompt = await buildPrompt(turns, dir);
 
   const args = [
     '-p', prompt,
     '--model', opts.model ?? 'sonnet',
-    '--tools', tools,
-    '--allowedTools', tools,
+    '--tools', tools.join(','),
+    '--allowedTools', allowed.join(','),
     '--disallowedTools', 'mcp__*',
     '--permission-mode', 'dontAsk',
+    // Project settings only (the empty temp dir has none): the user's own allow rules, hooks
+    // and plugins would otherwise apply here and could widen the Read rule above.
+    '--setting-sources', 'project',
     '--system-prompt', system,
     '--no-session-persistence',
     '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
