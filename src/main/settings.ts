@@ -10,6 +10,8 @@ export interface Settings {
   scale: number;
   /** Electron accelerator for "look at something". Must not collide with macOS defaults. */
   shortcut: string;
+  /** Electron accelerator for "glance at the screen": capture the whole display, no dragging. */
+  glanceShortcut: string;
   /** Anthropic API key for the 'api' backend. ANTHROPIC_API_KEY in the environment takes precedence. Encrypted with the macOS Keychain on disk. */
   apiKey: string | null;
   webSearch: boolean;
@@ -35,6 +37,7 @@ export interface Settings {
 
 // ⌘⌥Space is macOS's "Show Finder search window"; ⌥Space is taken by Alfred/Raycast users.
 export const DEFAULT_SHORTCUT = 'Control+Alt+Space';
+export const DEFAULT_GLANCE_SHORTCUT = 'Control+Alt+G';
 /** Tried in order when the configured shortcut cannot be registered. */
 export const SHORTCUT_FALLBACKS = [DEFAULT_SHORTCUT, 'Control+Alt+C', 'Control+Shift+Space', 'Control+Alt+Shift+Space'];
 const RETIRED_DEFAULTS = new Set(['CommandOrControl+Alt+Space']);
@@ -46,7 +49,7 @@ export const DEFAULT_NAME = 'Omni';
 const RETIRED_NAMES = new Set(['Clippet']);
 
 const DEFAULTS: Settings = {
-  name: DEFAULT_NAME, home: null, scale: DEFAULT_SCALE, shortcut: DEFAULT_SHORTCUT, apiKey: null, webSearch: true,
+  name: DEFAULT_NAME, home: null, scale: DEFAULT_SCALE, shortcut: DEFAULT_SHORTCUT, glanceShortcut: DEFAULT_GLANCE_SHORTCUT, apiKey: null, webSearch: true,
   backend: 'claude-code', claudeModel: 'sonnet', claudePath: null, modelUrl: null, sprites: true, spritePack: null,
   memory: true, welcomed: false, dock: true,
 };

@@ -2,8 +2,10 @@ import { nativeImage } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { AgentEvent } from '@shared/bubble';
 import type { ChatEvent, ConversationView, TurnView } from '@shared/panel';
-import { parseReply } from '@shared/tags';
+import { parseReply, pointTags } from '@shared/tags';
 import type { CompanionWindow } from './companionWindow';
+import { frameToScreen } from './capture';
+import type { ImageFrame } from './capture';
 import { replyViaApi } from './agent';
 import { replyViaClaudeCode } from './claudeCode';
 import { addMemory, listMemories } from './memory';
@@ -20,7 +22,12 @@ interface Conversation {
   views: TurnView[];
   busy: boolean;
   lastActivity: number;
+  /** The latest screenshot's frame; [point] tags refer to it. */
+  frame: ImageFrame | null;
 }
+
+/** A spot the helper pointed at, in screen points. */
+export interface PointTarget { x: number; y: number; label: string }
 
 /**
  * The one live conversation, shared by the bubble and the panel's Chat tab. Owns the
@@ -33,6 +40,8 @@ export class Chat {
   private listeners = new Set<(e: ChatEvent) => void>();
   /** Called when a reply changed memory or the helper's name. */
   onStateChanged: (() => void) | null = null;
+  /** Called with each [point] target as the reply streams, and with null when a new reply starts. */
+  onPoint: ((target: PointTarget | null) => void) | null = null;
 
   constructor(private companion: CompanionWindow) {}
 
@@ -49,7 +58,7 @@ export class Chat {
   /** Drop the current conversation and start an empty one. */
   newConversation(): string {
     this.stop();
-    this.conv = { id: randomUUID(), turns: [], views: [], busy: false, lastActivity: Date.now() };
+    this.conv = { id: randomUUID(), turns: [], views: [], busy: false, lastActivity: Date.now(), frame: null };
     this.emit({ conversationId: this.conv.id, type: 'new' });
     return this.conv.id;
   }
@@ -65,16 +74,19 @@ export class Chat {
     this.abort = null;
   }
 
-  /** Send a user message (optionally with the screen region it is about) and stream the reply. */
-  async send(text: string, image?: Buffer): Promise<void> {
+  /** Send a user message (optionally with the screenshot it is about) and stream the reply. */
+  async send(text: string, shot?: { png: Buffer; frame: ImageFrame }): Promise<void> {
     if (!this.conv) this.newConversation();
     const conv = this.conv!;
     this.stop();
     const abort = new AbortController();
     this.abort = abort;
 
-    const turn: Turn = { role: 'user', text, image };
+    const image = shot?.png;
+    const turn: Turn = { role: 'user', text, image, frame: shot?.frame };
     conv.turns.push(turn);
+    if (shot) conv.frame = shot.frame;
+    this.onPoint?.(null);
     const userView: TurnView = { role: 'user', text, image: image && nativeImage.createFromBuffer(image).resize({ width: 320 }).toDataURL() };
     conv.views.push(userView);
     conv.busy = true;
@@ -84,8 +96,20 @@ export class Chat {
     const settings = loadSettings();
     const reply: TurnView = { role: 'assistant', text: '', sources: [] };
     let talking = false;
+    let streamed = '';
+    let pointed = 0;
     const onEvent = (ev: AgentEvent): void => {
       if (abort.signal.aborted) return;
+      if (ev.type === 'delta' && conv.frame) {
+        // Point while the answer streams, so the character reaches each step as it appears.
+        streamed += ev.text;
+        const tags = pointTags(streamed);
+        for (const tag of tags.slice(pointed)) {
+          const p = frameToScreen(conv.frame, tag.x, tag.y);
+          if (p) this.onPoint?.({ ...p, label: tag.label });
+        }
+        pointed = tags.length;
+      }
       if (ev.type === 'source') reply.sources!.push({ url: ev.url, title: ev.title });
       if (ev.type === 'error') { reply.text = ev.message; reply.error = true; }
       this.emit({ conversationId: conv.id, ...ev });

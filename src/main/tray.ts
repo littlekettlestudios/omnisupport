@@ -14,6 +14,8 @@ export interface TrayActions {
   isSprites(): boolean;
   name(): string;
   shortcutLabel(): string;
+  glanceAtScreen(): void;
+  glanceShortcutLabel(): string;
 }
 
 /** Menu-bar icon. Call the returned rebuild after the name or shortcut changes. */
@@ -28,6 +30,7 @@ export function createTray(actions: TrayActions): { tray: Tray; rebuild: () => v
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: `Look at something…  (${actions.shortcutLabel()})`, click: () => actions.lookAtSomething() },
+        { label: `Glance at the screen${actions.glanceShortcutLabel() ? `  (${actions.glanceShortcutLabel()})` : ''}`, click: () => actions.glanceAtScreen() },
         { label: `Chat with ${name}…`, click: () => actions.openChat() },
         { type: 'separator' },
         { label: actions.isVisible() ? `Hide ${name}` : `Show ${name}`, click: () => { actions.toggleVisible(); rebuild(); } },

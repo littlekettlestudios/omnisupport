@@ -26,11 +26,11 @@ const STATE_CLIP: Record<CompanionState, string[]> = {
   idle: ['idle'], attentive: ['idle'], thinking: ['thinking', 'idle'], searching: ['thinking', 'idle'],
   talking: ['idle'], sleeping: ['idle'],
 };
-/** The sheets have one cheerful and one sad one-shot; every reaction maps onto those. */
+/** Most sheets have one cheerful and one sad one-shot; every reaction maps onto those, or a point clip when the pack has one. */
 const REACTION_CLIP: Record<ReactionClip, string[]> = {
-  wave: ['success'], point: ['success'], happy: ['success'], excited: ['success'], nod: ['success'], sorry: ['failure'],
+  wave: ['success'], point: ['point', 'success'], happy: ['success'], excited: ['success'], nod: ['success'], sorry: ['failure'],
 };
-const HOLD_END_MS: Record<string, number> = { success: 300, failure: 900 }; // rest on the last frame before going back
+const HOLD_END_MS: Record<string, number> = { success: 300, failure: 900, point: 900 }; // rest on the last frame before going back
 // Screen direction (atan2 with y down) in 45° steps from +x, to the facing that looks that way.
 const SECTORS = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
 const MAX_TRAVEL_S = 1.2;      // the bubble opens right away, so the walk can't take long

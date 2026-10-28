@@ -27,6 +27,7 @@ export default defineConfig({
           bubble: resolve(__dirname, 'src/renderer/bubble/index.html'),
           picker: resolve(__dirname, 'src/renderer/picker/index.html'),
           panel: resolve(__dirname, 'src/renderer/panel/index.html'),
+          marker: resolve(__dirname, 'src/renderer/marker/index.html'),
         },
       },
     },

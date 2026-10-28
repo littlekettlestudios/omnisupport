@@ -26,6 +26,7 @@ export interface PanelSettings {
   webSearch: boolean;
   scale: number;
   shortcut: string;
+  glanceShortcut: string;
   sprites: boolean;
   memory: boolean;
   dock: boolean;
@@ -43,6 +44,8 @@ export interface PanelState {
   conversation: ConversationView | null;
   /** Shortcut actually registered, as macOS glyphs. */
   shortcutLabel: string;
+  /** Glance shortcut as macOS glyphs, or '' when it could not be registered. */
+  glanceShortcutLabel: string;
   setup: { claudeCode: SetupCheck; screen: SetupCheck; apiKey: SetupCheck };
   dataFolder: string;
   version: string;

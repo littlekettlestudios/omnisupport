@@ -7,6 +7,8 @@ import { BubbleWindow } from './bubbleWindow';
 import { PanelWindow } from './panelWindow';
 import { Chat } from './chat';
 import { LookupFlow } from './lookupFlow';
+import { MarkerWindow } from './markerWindow';
+import { Pointer } from './pointer';
 import { Onboarding, claudeSignInState, openSignInTerminal } from './onboarding';
 import { listMemories } from './memory';
 import { createTray } from './tray';
@@ -35,7 +37,8 @@ if (!gotLock) app.quit();
 const companion = new CompanionWindow();
 const bubble = new BubbleWindow();
 const chat = new Chat(companion);
-const flow = new LookupFlow(companion, bubble, chat);
+const pointer = new Pointer(companion, new MarkerWindow());
+const flow = new LookupFlow(companion, bubble, chat, pointer);
 const onboarding = new Onboarding(companion, bubble);
 let visible = true;
 let sleeping = false;
@@ -43,10 +46,27 @@ let claudeCheck: SetupCheck = 'unknown';
 let rebuildTray = (): void => {};
 
 const lookAtSomething = (): void => { if (!sleeping) void flow.start(); };
+const glanceAtScreen = (): void => { if (!sleeping) void flow.glance(); };
+/** The glance shortcut actually registered, or null when it was taken. */
+let glanceActive: string | null = null;
+
+/** Register both shortcuts: look-at-something with fallbacks, glance as configured or not at all. */
+function registerShortcuts(): void {
+  globalShortcut.unregisterAll();
+  const s = loadSettings();
+  registerShortcut(s.shortcut);
+  glanceActive = null;
+  try {
+    if (globalShortcut.register(s.glanceShortcut, glanceAtScreen)) glanceActive = s.glanceShortcut;
+  } catch {
+    // Not a valid accelerator string.
+  }
+  if (glanceActive) console.log('[clippet] glance shortcut registered:', glanceActive);
+  else console.warn('[clippet] glance shortcut taken or invalid:', s.glanceShortcut);
+}
 
 /** Register the shortcut, falling back to known-free combinations if it is taken. Returns the one registered. */
 function registerShortcut(preferred: string): string | null {
-  globalShortcut.unregisterAll();
   for (const accel of [preferred, ...SHORTCUT_FALLBACKS.filter((a) => a !== preferred)]) {
     try {
       if (globalShortcut.register(accel, lookAtSomething)) {
@@ -75,7 +95,7 @@ async function panelState(recheck = false): Promise<PanelState> {
   return {
     settings: {
       name: s.name, backend: s.backend, claudeModel: s.claudeModel, webSearch: s.webSearch,
-      scale: s.scale, shortcut: s.shortcut, sprites: s.sprites, memory: s.memory, dock: s.dock,
+      scale: s.scale, shortcut: s.shortcut, glanceShortcut: s.glanceShortcut, sprites: s.sprites, memory: s.memory, dock: s.dock,
     },
     hasApiKey: !!s.apiKey,
     apiKeyFromEnv: envKey,
@@ -84,6 +104,7 @@ async function panelState(recheck = false): Promise<PanelState> {
     memories: listMemories(),
     conversation: chat.current,
     shortcutLabel: shortcutLabel(activeShortcut()),
+    glanceShortcutLabel: glanceActive ? shortcutLabel(glanceActive) : '',
     setup: {
       claudeCode: claudeCheck,
       screen: screenCheck(),
@@ -106,11 +127,12 @@ function applySettings(patch: Partial<PanelSettings>): void {
   if (typeof patch.dock === 'boolean') s.dock = patch.dock;
   if (typeof patch.scale === 'number' && Number.isFinite(patch.scale)) s.scale = Math.round(Math.min(Math.max(patch.scale, 60), 400));
   if (typeof patch.shortcut === 'string' && patch.shortcut.trim()) s.shortcut = patch.shortcut.trim();
+  if (typeof patch.glanceShortcut === 'string' && patch.glanceShortcut.trim()) s.glanceShortcut = patch.glanceShortcut.trim();
   saveSettings(s);
 
   if (s.scale !== before.scale) companion.send({ type: 'setScale', scale: s.scale });
   if (s.sprites !== before.sprites) companion.reloadRenderer();
-  if (s.shortcut !== before.shortcut) registerShortcut(s.shortcut);
+  if (s.shortcut !== before.shortcut || s.glanceShortcut !== before.glanceShortcut) registerShortcuts();
   if (s.dock !== before.dock) applyDock(s.dock);
   rebuildTray();
 }
@@ -124,6 +146,7 @@ function applyDock(show: boolean): void {
     if (!app.isPackaged) app.dock.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
     app.dock.setMenu(Menu.buildFromTemplate([
       { label: 'Look at something…', click: lookAtSomething },
+      { label: 'Glance at the screen', click: glanceAtScreen },
       { label: 'Chat', click: () => panel.show('chat') },
       { label: 'Settings…', click: () => panel.show('settings') },
     ]));
@@ -225,6 +248,7 @@ chat.on((e) => {
   if (e.type !== 'turn' && e.type !== 'new' && bubble.visible && bubble.conversationId === e.conversationId) bubble.agent(e);
 });
 chat.onStateChanged = () => { void panel.refresh(); rebuildTray(); };
+chat.onPoint = (target) => { if (target) pointer.point(target); else pointer.clear(false); };
 
 app.whenReady().then(() => {
   const settings = loadSettings();
@@ -264,6 +288,8 @@ app.whenReady().then(() => {
 
   // CLIPPET_DEBUG=flow: open the picker once on launch so the flow can be checked without a keyboard.
   if (process.env['CLIPPET_DEBUG'] === 'flow') setTimeout(lookAtSomething, 2500);
+  // CLIPPET_DEBUG=glance: glance at the screen once on launch.
+  if (process.env['CLIPPET_DEBUG'] === 'glance') setTimeout(glanceAtScreen, 2500);
   // CLIPPET_DEBUG=pose: cycle a few states and reactions so clip playback can be eyeballed.
   if (process.env['CLIPPET_DEBUG'] === 'pose') {
     const seq: Array<() => void> = [
@@ -279,10 +305,11 @@ app.whenReady().then(() => {
   // CLIPPET_DEBUG=panel: open the panel on launch.
   if (process.env['CLIPPET_DEBUG'] === 'panel') setTimeout(() => panel.show('chat'), 1500);
 
-  registerShortcut(settings.shortcut);
+  registerShortcuts();
 
   rebuildTray = createTray({
     lookAtSomething,
+    glanceAtScreen,
     openChat: () => panel.show('chat'),
     openSettings: () => panel.show('settings'),
     openSetup: () => panel.show('setup'),
@@ -301,6 +328,7 @@ app.whenReady().then(() => {
     isSleeping: () => sleeping,
     name: () => loadSettings().name,
     shortcutLabel: () => shortcutLabel(activeShortcut()),
+    glanceShortcutLabel: () => (glanceActive ? shortcutLabel(glanceActive) : ''),
   }).rebuild;
 });
 

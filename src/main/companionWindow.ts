@@ -100,10 +100,16 @@ export class CompanionWindow {
     return { x: p.x - b.x, y: p.y - b.y };
   }
 
+  /** Where the character stands when idle: where the user last dropped it, else the bottom-right corner. */
+  get home(): { x: number; y: number } {
+    const [width, height] = this.win?.getContentSize() ?? [0, 0];
+    return loadSettings().home ?? { x: width - 140, y: height - 24 };
+  }
+
   private config(win: BrowserWindow): CompanionConfig {
     const s = loadSettings();
     const [width, height] = win.getContentSize();
-    const home = s.home ?? { x: width - 140, y: height - 24 };
+    const home = this.home;
     this.feet = home;
     return {
       modelUrl: this.modelUrl(s.modelUrl),
@@ -126,10 +132,10 @@ export class CompanionWindow {
     return out;
   }
 
-  /** User-chosen sprite pack, else the bundled Data Monster (then the omni3 pixel robot), or null if none is there. */
+  /** User-chosen sprite pack, else the bundled Omni character, Data Monster, or omni3 robot. */
   spritesUrl(custom: string | null): string | null {
     if (custom) return custom;
-    for (const pack of ['data-monster', 'omni3']) {
+    for (const pack of ['omni', 'data-monster', 'omni3']) {
       const atlas = join(app.getAppPath(), 'assets', 'sprites', pack, 'atlas.json');
       if (existsSync(atlas)) return pathToFileURL(atlas).href;
     }

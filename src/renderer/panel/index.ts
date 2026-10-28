@@ -230,6 +230,8 @@ $('key-save').addEventListener('click', async () => { if (keyInput.value.trim())
 $('key-remove').addEventListener('click', async () => apply(await panel.setApiKey(null)));
 const shortcut = $<HTMLInputElement>('shortcut');
 $('shortcut-save').addEventListener('click', () => { if (shortcut.value.trim()) void save({ shortcut: shortcut.value.trim() }); });
+const glanceShortcut = $<HTMLInputElement>('glance-shortcut');
+$('glance-shortcut-save').addEventListener('click', () => { if (glanceShortcut.value.trim()) void save({ glanceShortcut: glanceShortcut.value.trim() }); });
 
 // ---- setup -----------------------------------------------------------------
 const PILL: Record<SetupCheck, [string, string]> = {
@@ -309,7 +311,7 @@ function apply(s: PanelState): void {
   $<HTMLInputElement>('dock').checked = st.dock;
   $('model-label').textContent = s.customModel ? 'Using your own GLB.' : 'Using the bundled omni3 robot.';
   $<HTMLButtonElement>('model-reset').disabled = !s.customModel;
-  $('sprites-label').textContent = s.customSprites ? 'Using your own sprite pack.' : 'Using the bundled Data Monster.';
+  $('sprites-label').textContent = s.customSprites ? 'Using your own sprite pack.' : 'Using the bundled Omni character.';
   $<HTMLButtonElement>('sprites-reset').disabled = !s.customSprites;
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name=backend]')) r.checked = r.value === st.backend;
   $('row-model').style.display = st.backend === 'claude-code' ? '' : 'none';
@@ -320,6 +322,10 @@ function apply(s: PanelState): void {
   $<HTMLInputElement>('web-search').checked = st.webSearch;
   if (document.activeElement !== shortcut) shortcut.value = st.shortcut;
   $('shortcut-label').textContent = `Active: ${s.shortcutLabel}. Use Electron accelerator names, e.g. Control+Alt+C.`;
+  if (document.activeElement !== glanceShortcut) glanceShortcut.value = st.glanceShortcut;
+  $('glance-shortcut-label').textContent = s.glanceShortcutLabel
+    ? `Active: ${s.glanceShortcutLabel}. Looks at the whole screen, no dragging; ${s.settings.name} can point at things on it.`
+    : 'Not registered: that combination is taken or invalid.';
   $<HTMLInputElement>('memory-on').checked = st.memory;
   $('version').textContent = s.version;
   renderFacts();
