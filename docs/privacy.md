@@ -4,8 +4,10 @@ Omni Support is built so the helper only ever sees what you show it.
 
 ## What is captured
 
-- **Only the rectangle you drag**, and only when you press the shortcut and finish the
-  drag. There is no background screen watching, no clipboard reading, no keylogging.
+- **Only what you ask it to look at**, and only when you press a shortcut: the rectangle you
+  drag with the look-at-something shortcut, or the whole display under the pointer with the
+  glance shortcut. There is no background screen watching, no clipboard reading, no
+  keylogging. A glance includes everything on that display, so close anything private first.
 - The capture uses macOS's `screencapture` into a temporary file that is read into memory
   and deleted right away. The bubble shows you the thumbnail of exactly what is sent.
 
@@ -13,7 +15,7 @@ Omni Support is built so the helper only ever sees what you show it.
 
 When you ask something, these go to Anthropic:
 
-- the captured region (if any), your note or message;
+- the captured region or screen (if any), your note or message;
 - the earlier messages of the current conversation, so follow-ups have context;
 - your saved memory notes and the helper's name (in the system prompt), unless memory is off.
 

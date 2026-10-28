@@ -86,10 +86,11 @@ You can reopen this checklist any time: menu-bar icon → **Setup…**.
 | To | Do |
 |---|---|
 | Ask about something on screen | Press `⌃⌥Space`, drag over it, type a note or just press Enter |
+| Ask about the whole screen | Press `⌃⌥G`, type a note or just press Enter. The helper walks to and points at what it mentions |
 | Follow up on an answer | Type in the **Reply…** box under the answer |
 | Ask without a screenshot | Click the helper or the Dock icon, or menu bar → **Chat with …** |
 | See the whole conversation | Click **Open chat window** in the bubble |
-| Start over | **New chat** in the chat window (pointing at a new region always starts one) |
+| Start over | **New chat** in the chat window (a new region or glance always starts one) |
 | Move the helper | Drag it; it remembers the spot |
 | Quiet it | Menu bar → **Do not disturb**, or **Hide** |
 | Open Settings | Menu bar → **Settings…**, the Dock icon's menu, or ⌘, while the app is in front |
@@ -133,6 +134,7 @@ The Data Monster's own sheet and layout are in `assets/sprites/data-monster/sour
 | API key | Saved encrypted with the Keychain; **Remove** deletes it. |
 | Web search | Lets answers look things up and read pages. Off means answers come only from what Claude already knows. |
 | Shortcut | An [Electron accelerator](https://www.electronjs.org/docs/latest/api/accelerator), e.g. `Control+Alt+C`. If it's taken, the app falls back to a free one and shows which. |
+| Glance shortcut | Same format, default `Control+Alt+G`. No fallback: if it's taken, Settings says so and the menu-bar item still works. |
 | Memory (Memory tab) | Turn long-term notes on or off, add, delete or clear them. |
 
 Everything is stored in the data folder, `~/Library/Application Support/Omni Support/`:

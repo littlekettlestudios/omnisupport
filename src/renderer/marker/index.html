@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Omni marker</title>
+    <style>
+      :root { --accent: #ff9f0a; --bg: rgba(29, 29, 31, 0.86); --fg: #fff; }
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; font: 600 13px -apple-system, system-ui, sans-serif; }
+      #wrap { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 0; opacity: 0; transition: opacity 0.2s; }
+      #wrap.on { opacity: 1; }
+      #wrap.flip { flex-direction: column-reverse; }
+      #ring { flex: none; width: 48px; height: 48px; box-sizing: border-box; border-radius: 50%; border: 3px solid var(--accent); box-shadow: 0 0 0 2px rgba(0,0,0,0.25), 0 0 14px var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+      #label { color: var(--fg); background: var(--bg); padding: 4px 10px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+      #label:empty { display: none; }
+      @keyframes pulse { 50% { transform: scale(0.8); } }
+      @media (prefers-reduced-motion: reduce) { #ring { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="wrap"><div id="ring"></div><div id="label"></div></div>
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

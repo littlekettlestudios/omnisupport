@@ -69,9 +69,9 @@ window.bubble.onShow((p) => {
     show(note, true); show(hint, true);
     if (p.kind === 'lookup') {
       thumb.src = p.thumbnail; show(thumb, true);
-      titleEl.textContent = "What's up with this?";
+      titleEl.textContent = p.screen ? 'What can I help with?' : "What's up with this?";
       note.placeholder = 'Add a note, or press Enter to just look';
-      hint.textContent = 'Only this region is sent. Enter to send · Esc to close';
+      hint.textContent = `${p.screen ? 'This screen is sent' : 'Only this region is sent'}. Enter to send · Esc to close`;
     } else {
       show(thumb, false);
       titleEl.textContent = `Hi, I'm ${name}`;

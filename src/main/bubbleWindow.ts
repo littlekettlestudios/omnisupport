@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { join } from 'node:path';
 import type { AgentEvent, BubbleActionId, BubbleShow } from '@shared/bubble';
 import { BUBBLE_IPC } from '@shared/bubble';
+import type { BubbleSide } from './pointer';
 
 const here = import.meta.dirname;
 const WIDTH = 352; // card 332 + 10px margin each side
@@ -12,6 +13,8 @@ export class BubbleWindow {
   private onClose: (() => void) | null = null;
   private onAction: ((id: BubbleActionId) => void) | null = null;
   private anchor = { x: 0, y: 0 };
+  private side: BubbleSide = 'left';
+  private height = 200;
   /** The Chat conversation this bubble is showing, so only its events reach it. */
   conversationId: string | null = null;
 
@@ -62,6 +65,7 @@ export class BubbleWindow {
     handlers: { onSubmit?: (note: string) => void; onClose?: () => void; onAction?: (id: BubbleActionId) => void },
   ): void {
     this.anchor = anchor;
+    this.side = 'left';
     this.conversationId = null;
     this.onSubmit = handlers.onSubmit ?? null;
     this.onClose = handlers.onClose ?? null;
@@ -75,6 +79,13 @@ export class BubbleWindow {
     };
     if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send);
     else send();
+  }
+
+  /** Follow the character to a new head position, on the given side of it. */
+  moveAnchor(anchor: { x: number; y: number }, side: BubbleSide): void {
+    this.anchor = anchor;
+    this.side = side;
+    if (this.visible) this.place(this.height);
   }
 
   agent(ev: AgentEvent): void {
@@ -95,12 +106,16 @@ export class BubbleWindow {
     return !!this.win && !this.win.isDestroyed() && this.win.isVisible();
   }
 
-  /** Keep the bubble beside the anchor and inside the work area. */
+  /** Keep the bubble beside the anchor, on its side if there is room, and inside the work area. */
   private place(height: number): void {
     if (!this.win) return;
+    this.height = height;
     const { workArea } = screen.getDisplayNearestPoint(this.anchor);
-    let x = this.anchor.x - WIDTH - 8; // prefer left of the character
-    if (x < workArea.x) x = this.anchor.x + 8;
+    const left = this.anchor.x - WIDTH - 8;
+    const right = this.anchor.x + 8;
+    let x = this.side === 'left' ? left : right;
+    if (x < workArea.x) x = right;
+    else if (x + WIDTH > workArea.x + workArea.width) x = left;
     x = Math.min(Math.max(workArea.x, x), workArea.x + workArea.width - WIDTH);
     let y = this.anchor.y - height + 40; // bottom of the bubble near the head
     y = Math.min(Math.max(workArea.y, y), workArea.y + workArea.height - height);

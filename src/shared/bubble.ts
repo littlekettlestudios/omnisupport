@@ -16,7 +16,8 @@ export type AgentEvent =
   | { type: 'error'; message: string; actions?: BubbleAction[] };
 
 export type BubbleShow =
-  | { kind: 'lookup'; name: string; thumbnail: string; rect: ScreenRect }
+  /** A captured screenshot to ask about; screen is true for a whole-screen glance. */
+  | { kind: 'lookup'; name: string; thumbnail: string; rect: ScreenRect; screen?: boolean }
   /** Text-only chat, opened by clicking the character. */
   | { kind: 'chat'; name: string }
   | { kind: 'card'; title: string; message: string; actions: BubbleAction[]; tone?: 'info' | 'success' };

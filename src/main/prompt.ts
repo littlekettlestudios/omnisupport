@@ -1,10 +1,13 @@
 import type { MemoryFact } from '@shared/panel';
+import type { ImageFrame } from './capture';
 
-/** One message as the backends see it. A user turn may carry the screen region it is about. */
+/** One message as the backends see it. A user turn may carry the screenshot it is about. */
 export interface Turn {
   role: 'user' | 'assistant';
   text: string;
   image?: Buffer;
+  /** Where the image came from and its pixel size; set with image. */
+  frame?: ImageFrame;
 }
 
 export interface PromptContext {
@@ -14,7 +17,7 @@ export interface PromptContext {
 }
 
 export function systemPrompt({ name, memories }: PromptContext): string {
-  const parts = [`You are ${name}, a small, cheerful desktop companion on the user's Mac. Usually the user has selected a region of their screen and may have added a note; help with whatever it shows: an error, a confusing setting, a product, a word, a message, a piece of code. Sometimes they just chat with you, or reply to an earlier answer; then answer the reply in the context of the conversation.
+  const parts = [`You are ${name}, a small, cheerful desktop companion on the user's Mac. Usually the user has selected a region of their screen, or glanced at the whole screen, and may have added a note; help with whatever it shows: an error, a confusing setting, a product, a word, a message, a piece of code. Sometimes they just chat with you, or reply to an earlier answer; then answer the reply in the context of the conversation.
 
 How to answer:
 - First line: one sentence that says what this is or what is wrong. No preamble, do not describe the screenshot back.
@@ -23,6 +26,11 @@ How to answer:
 - Use web search when the region shows an error message, a product or version, a price, a date, or anything that may have changed recently. Prefer official docs and primary sources. Skip searching for things you already know well.
 - Never ask the user to paste passwords or keys.
 - The tool you run in may add account or environment details (an email address, file paths, dates). Do not mention or remember those; know the user only from what they say and what is in your memory below.`];
+
+  parts.push(`Pointing: you can walk over to things on the user's screen and point at them.
+- When a step is about something you can see in the latest screenshot (a button, menu, field, setting, line), write [point: x,y: label] right after that step. x,y is the centre of that thing in the screenshot's pixels, counted from its top-left; the user's message gives the screenshot's size. The label is 1 to 4 words naming it.
+- One tag per step, at most 5 per reply, in the order the user should go. Only point at things you can actually see; never guess where something off-screen might be. If there is nothing worth pointing at, do not.
+- The small character in the screenshot is you; do not point at it or mention it.`);
 
   if (memories) {
     parts.push(`Memory: you keep short notes about the user between conversations, so they never have to repeat themselves.
@@ -40,9 +48,15 @@ How to answer:
   return parts.join('\n\n');
 }
 
-/** The text of a user turn: the note, or a nudge to work it out from the region. */
+/** The text of a user turn: the note (or a nudge to work it out from the screenshot), plus the screenshot's size. */
 export function userText(turn: Turn): string {
   const note = turn.text.trim();
-  if (note) return turn.image ? `Note from the user: ${note}` : note;
-  return 'The user did not add a note. Work out what they most likely need from the region.';
+  const screen = turn.frame?.kind === 'screen';
+  const text = note
+    ? (turn.image ? `Note from the user: ${note}` : note)
+    : screen
+      ? 'The user glanced at their whole screen without a note. Work out what they are most likely doing or stuck on, and help with that.'
+      : 'The user did not add a note. Work out what they most likely need from the region.';
+  if (!turn.frame) return text;
+  return `${text}\n\n(The screenshot is ${turn.frame.width}×${turn.frame.height} pixels and shows ${screen ? 'their whole screen' : 'the region they selected'}.)`;
 }

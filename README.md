@@ -17,6 +17,10 @@ Open source from [Little Kettle Studios](https://github.com/littlekettlestudios)
 
 - **Look at something.** Press `⌃⌥Space` and drag over part of the screen. The helper walks
   over, looks at the region, and asks what you need. Only that region is captured.
+- **Glance.** Press `⌃⌥G` to have it look at the whole screen you're on, no dragging. Handy
+  for "where is the setting for…" questions.
+- **Point.** When an answer has steps, the helper walks over to each button, menu or field it
+  mentions, points at it and rings the exact spot, one step after another.
 - **Chat.** Reply to any answer in the bubble, click the helper to ask something, or open
   the chat window from the menu-bar icon. The bubble and the window share one conversation.
 - **Memory.** Tell it your name, your setup, the tools you use. It keeps short notes
@@ -63,8 +67,9 @@ Open source from [Little Kettle Studios](https://github.com/littlekettlestudios)
    opens: name your helper, then follow the checklist (Claude Code sign-in or API key,
    Screen Recording). Right-click the Dock icon → **Options → Keep in Dock** to keep it.
 
-4. **Use it:** press `⌃⌥Space` and drag over something on screen, or click the helper to
-   chat. Reply in the bubble to follow up; Esc closes it.
+4. **Use it:** press `⌃⌥Space` and drag over something on screen, press `⌃⌥G` to have it
+   look at the whole screen, or click the helper to chat. Reply in the bubble to follow up;
+   Esc closes it.
 
 The full walkthrough (prerequisites, permissions, settings, updating, troubleshooting and
 uninstalling) is in [docs/setup.md](docs/setup.md). Using it on a work Mac? Read
@@ -79,7 +84,7 @@ uninstalling) is in [docs/setup.md](docs/setup.md). Using it on a work Mac? Read
 - **The app is ad-hoc signed, not notarized.** It runs on the Mac that built it; macOS may
   ask for Screen Recording again after each rebuild, and other Macs need right-click →
   Open. (Running with `npx electron .` asks for "Electron" instead.)
-- **What leaves your Mac:** the region you select, your note, the conversation and your
+- **What leaves your Mac:** the region you select (or the whole screen when you glance), your note, the conversation and your
   saved memory notes go to Anthropic (through Claude Code or the API) when you ask
   something, and web search may fetch pages. Nothing is sent in the background. See
   [docs/privacy.md](docs/privacy.md).
@@ -114,7 +119,7 @@ npm run dist        # package Omni Support.app into release/
 The app icon is made from `resources/icon-art.jpg` by `scripts/make_icon.py` (needs Pillow).
 
 `CLIPPET_DEBUG=1` logs hover, click and drag events; `CLIPPET_DEBUG=flow` opens the region
-picker 2.5 s after launch; `CLIPPET_DEBUG=pose` cycles the character's states and
+picker 2.5 s after launch; `CLIPPET_DEBUG=glance` glances at the screen 2.5 s after launch; `CLIPPET_DEBUG=pose` cycles the character's states and
 reactions; `CLIPPET_DEBUG=panel` opens the chat window on launch. ("Clippet" was the
 project's working name and survives in some code identifiers.)
 

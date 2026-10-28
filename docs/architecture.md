@@ -5,7 +5,8 @@ Omni Support is an Electron menu-bar app with four kinds of window and one conve
 ```
 ┌────────────────────────── Electron main (src/main) ───────────────────────────┐
 │ index.ts        tray, shortcut, settings side effects, first-run              │
-│ lookupFlow.ts   pick region → capture → walk over → bubble; click → chat      │
+│ lookupFlow.ts   pick region or glance → capture → bubble; click → chat        │
+│ pointer.ts      walk to each [point: x,y] in the answer, ring it (marker)     │
 │ chat.ts         the live conversation: backend call, companion reactions,     │
 │                 [remember:] / [name:] tags → memory.json / settings.json      │
 │ prompt.ts       system prompt from name + memory                              │
@@ -40,6 +41,27 @@ Omni Support is an Electron menu-bar app with four kinds of window and one conve
   and shows a Dock icon just while the panel is open.
 - **Picker** (`src/renderer/picker/`): a full-screen overlay that reports the dragged
   rectangle; main then captures exactly that rectangle with `screencapture -R`.
+- **Marker** (`src/renderer/marker/`): a small transparent, click-through window with a
+  pulsing ring and a label, moved over the exact spot the helper points at. It is separate
+  from the companion window so it works on any display.
+
+## Glancing and pointing
+
+The glance shortcut (`⌃⌥G` by default) captures the whole display under the cursor, with no
+picker. Every capture, glance or region, goes through `captureShot` (`capture.ts`), which
+scales it to at most 1280 px on the long edge and records an `ImageFrame`: the captured
+rectangle in screen points and the PNG's pixel size. Both backends would otherwise shrink
+large images themselves, and then the model's coordinates would no longer match. The user
+message states the pixel size, and the system prompt asks for a
+`[point: x,y: label]` tag after any step about something visible in the screenshot.
+
+`Chat` scans the reply as it streams and maps each new tag through the conversation's latest
+frame to a screen point (`frameToScreen`). The `Pointer` (`pointer.ts`) queues those points
+and visits them in order: it walks the character to stand beside the spot, on the side that
+leaves the bubble room beyond it, faces it, plays the `point` reaction, rings it with the
+marker, moves the bubble along, and stays about two seconds before the next one. A spot on
+another display cannot be walked to, so the character just turns toward it. Closing the
+bubble clears the marker and walks the character home.
 
 ## One conversation
 
@@ -76,7 +98,8 @@ and asks it to end replies with control tags:
 
 - `[remember: <fact>]` for something worth keeping (at most 3 per reply);
 - `[name: <new name>]` when the user renames it;
-- `[mood: happy|neutral|sorry]`, which picks the character's reaction clip.
+- `[mood: happy|neutral|sorry]`, which picks the character's reaction clip;
+- `[point: x,y: label]` after a step, read while the reply streams (see above).
 
 `src/shared/tags.ts` hides the tags while text streams and parses them out of the finished
 reply. `Chat` saves new facts with `memory.ts` (deduplicated, capped at 60) and new names
